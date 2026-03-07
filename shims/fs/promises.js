@@ -1,0 +1,163 @@
+// Async fs.promises implementation
+// Maps to transport layer (REST/WebSocket/hybrid  -  TBD)
+
+export function createFsPromises(metadataCache, contentCache, transport) {
+  return {
+    async stat(path) {
+      // Try cache first, fall back to server
+      const cached = metadataCache.toStat(path);
+      if (cached) return cached;
+
+      const meta = await transport.stat(path);
+      metadataCache.set(path, meta);
+      return metadataCache.toStat(path);
+    },
+
+    async lstat(path) {
+      // No symlinks in our context  -  same as stat
+      return this.stat(path);
+    },
+
+    async readdir(path) {
+      // If metadata cache knows this is a file, return empty (ENOTDIR)
+      const meta = metadataCache.get(path);
+      if (meta && meta.type === "file") {
+        return [];
+      }
+      // Serve from metadata cache
+      const entries = metadataCache.readdir(path);
+      if (entries.length > 0) {
+        return entries.map((e) => e.name);
+      }
+      // Fallback to server
+      const serverEntries = await transport.readdir(path);
+      return serverEntries.map((e) => e.name);
+    },
+
+    async readFile(path, encoding) {
+      if (typeof encoding === "object") encoding = encoding?.encoding;
+      const wantText = encoding === "utf8" || encoding === "utf-8";
+
+      // Check content cache
+      const cached = contentCache.get(path);
+      if (cached !== null) {
+        if (wantText) {
+          return typeof cached === "string"
+            ? cached
+            : new TextDecoder().decode(cached);
+        }
+        // Binary mode: ensure we return a proper Uint8Array with .buffer
+        if (typeof cached === "string") {
+          return new TextEncoder().encode(cached);
+        }
+        return cached;
+      }
+
+      // Fetch from server
+      const data = await transport.readFile(path, encoding);
+      contentCache.set(path, data);
+      return data;
+    },
+
+    async writeFile(path, data, encoding) {
+      if (typeof encoding === "object") encoding = encoding?.encoding;
+
+      // Update caches optimistically
+      contentCache.set(path, data);
+      const size =
+        typeof data === "string" ? data.length : data.byteLength || 0;
+      metadataCache.set(path, {
+        type: "file",
+        size,
+        mtime: Date.now(),
+        ctime: metadataCache.get(path)?.ctime || Date.now(),
+      });
+
+      // Send to server
+      const result = await transport.writeFile(path, data, encoding);
+      // Update metadata with server-confirmed values
+      if (result.mtime) {
+        metadataCache.set(path, {
+          type: "file",
+          size: result.size || size,
+          mtime: result.mtime,
+          ctime: metadataCache.get(path)?.ctime || Date.now(),
+        });
+      }
+    },
+
+    async appendFile(path, data, encoding) {
+      contentCache.invalidate(path);
+      await transport.appendFile(path, data);
+      // Refresh metadata
+      const meta = await transport.stat(path);
+      metadataCache.set(path, meta);
+    },
+
+    async unlink(path) {
+      contentCache.delete(path);
+      metadataCache.delete(path);
+      await transport.unlink(path);
+    },
+
+    async rename(oldPath, newPath) {
+      // Move content cache entry
+      const content = contentCache.get(oldPath);
+      if (content !== null) {
+        contentCache.set(newPath, content);
+        contentCache.delete(oldPath);
+      }
+      // Move metadata
+      metadataCache.rename(oldPath, newPath);
+
+      await transport.rename(oldPath, newPath);
+    },
+
+    async mkdir(path, options) {
+      const recursive =
+        typeof options === "object" ? !!options.recursive : !!options;
+      metadataCache.set(path, { type: "directory" });
+      await transport.mkdir(path, recursive);
+    },
+
+    async rmdir(path) {
+      metadataCache.delete(path);
+      await transport.rmdir(path);
+    },
+
+    async rm(path, options) {
+      const recursive =
+        typeof options === "object" ? !!options.recursive : false;
+      metadataCache.delete(path);
+      contentCache.delete(path);
+      await transport.rm(path, recursive);
+    },
+
+    async copyFile(src, dest) {
+      await transport.copyFile(src, dest);
+      // Refresh metadata for dest
+      const meta = await transport.stat(dest);
+      metadataCache.set(dest, meta);
+    },
+
+    async access(path) {
+      if (metadataCache.has(path)) return;
+      await transport.access(path);
+    },
+
+    async realpath(path) {
+      // Empty path = vault root, return the vault base path
+      if (!path || path === "/" || path === ".") return "/";
+      return transport.realpath(path);
+    },
+
+    async utimes(path, atime, mtime) {
+      await transport.utimes(path, atime, mtime);
+      const meta = metadataCache.get(path);
+      if (meta) {
+        meta.mtime = typeof mtime === "number" ? mtime : mtime.getTime();
+        metadataCache.set(path, meta);
+      }
+    },
+  };
+}
