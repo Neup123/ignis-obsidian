@@ -5,32 +5,44 @@ const config = require("../config");
 
 const router = express.Router();
 
-// Resolve a client-provided path to an absolute path within the vault.
+// Resolve the vault root for a request. Reads vault ID from query or body.
+function getVaultRoot(req, res) {
+  const vaultId = req.query.vault || req.body?.vault || config.defaultVaultId;
+  const vaultPath = config.getVaultPath(vaultId);
+  if (!vaultPath) {
+    res.status(404).json({ error: "Vault not found", id: vaultId });
+    return null;
+  }
+  return vaultPath;
+}
+
+// Resolve a client-provided path to an absolute path within a vault.
 // Strips leading slashes so paths from the client are always treated as
 // relative to the vault root. Rejects path traversal attempts.
-function resolveVaultPath(relativePath) {
-  // Strip leading slashes  -  client paths like "/.obsidian" should resolve
-  // relative to the vault, not as absolute filesystem paths.
+function resolveVaultPath(vaultRoot, relativePath) {
   const cleaned = (relativePath || "").replace(/^\/+/, "");
-  const resolved = path.resolve(config.vaultPath, cleaned);
-  if (!resolved.startsWith(path.resolve(config.vaultPath))) {
+  const resolved = path.resolve(vaultRoot, cleaned);
+  if (!resolved.startsWith(path.resolve(vaultRoot))) {
     return null;
   }
   return resolved;
 }
 
 function guardPath(req, res) {
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return null;
   const p = req.query.path ?? req.body?.path;
   if (p === undefined || p === null) {
     res.status(400).json({ error: "Missing path parameter" });
     return null;
   }
   // Empty string = vault root, which is valid
-  const resolved = resolveVaultPath(p);
+  const resolved = resolveVaultPath(vaultRoot, p);
   if (!resolved) {
     res.status(403).json({ error: "Path traversal rejected" });
     return null;
   }
+  req._vaultRoot = vaultRoot;
   return resolved;
 }
 
@@ -89,12 +101,10 @@ router.get("/readFile", async (req, res) => {
     // Check if path is a directory
     const stat = await fs.promises.stat(resolved);
     if (stat.isDirectory()) {
-      return res
-        .status(400)
-        .json({
-          error: "EISDIR: illegal operation on a directory",
-          code: "EISDIR",
-        });
+      return res.status(400).json({
+        error: "EISDIR: illegal operation on a directory",
+        code: "EISDIR",
+      });
     }
     const encoding = req.query.encoding;
     if (encoding === "utf8" || encoding === "utf-8") {
@@ -111,9 +121,11 @@ router.get("/readFile", async (req, res) => {
   }
 });
 
-// POST /api/fs/writeFile { path, content, encoding? }
+// POST /api/fs/writeFile { path, content, encoding?, vault? }
 router.post("/writeFile", async (req, res) => {
-  const resolved = resolveVaultPath(req.body?.path);
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return;
+  const resolved = resolveVaultPath(vaultRoot, req.body?.path);
   if (!resolved) return res.status(403).json({ error: "Invalid path" });
   try {
     // Ensure parent directory exists
@@ -137,9 +149,11 @@ router.post("/writeFile", async (req, res) => {
   }
 });
 
-// POST /api/fs/appendFile { path, content }
+// POST /api/fs/appendFile { path, content, vault? }
 router.post("/appendFile", async (req, res) => {
-  const resolved = resolveVaultPath(req.body?.path);
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return;
+  const resolved = resolveVaultPath(vaultRoot, req.body?.path);
   if (!resolved) return res.status(403).json({ error: "Invalid path" });
   try {
     await fs.promises.appendFile(resolved, req.body.content, "utf-8");
@@ -149,9 +163,11 @@ router.post("/appendFile", async (req, res) => {
   }
 });
 
-// POST /api/fs/mkdir { path, recursive? }
+// POST /api/fs/mkdir { path, recursive?, vault? }
 router.post("/mkdir", async (req, res) => {
-  const resolved = resolveVaultPath(req.body?.path);
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return;
+  const resolved = resolveVaultPath(vaultRoot, req.body?.path);
   if (!resolved) return res.status(403).json({ error: "Invalid path" });
   try {
     await fs.promises.mkdir(resolved, { recursive: !!req.body.recursive });
@@ -161,10 +177,12 @@ router.post("/mkdir", async (req, res) => {
   }
 });
 
-// POST /api/fs/rename { oldPath, newPath }
+// POST /api/fs/rename { oldPath, newPath, vault? }
 router.post("/rename", async (req, res) => {
-  const oldResolved = resolveVaultPath(req.body?.oldPath);
-  const newResolved = resolveVaultPath(req.body?.newPath);
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return;
+  const oldResolved = resolveVaultPath(vaultRoot, req.body?.oldPath);
+  const newResolved = resolveVaultPath(vaultRoot, req.body?.newPath);
   if (!oldResolved || !newResolved)
     return res.status(403).json({ error: "Invalid path" });
   try {
@@ -175,10 +193,12 @@ router.post("/rename", async (req, res) => {
   }
 });
 
-// POST /api/fs/copyFile { src, dest }
+// POST /api/fs/copyFile { src, dest, vault? }
 router.post("/copyFile", async (req, res) => {
-  const srcResolved = resolveVaultPath(req.body?.src);
-  const destResolved = resolveVaultPath(req.body?.dest);
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return;
+  const srcResolved = resolveVaultPath(vaultRoot, req.body?.src);
+  const destResolved = resolveVaultPath(vaultRoot, req.body?.dest);
   if (!srcResolved || !destResolved)
     return res.status(403).json({ error: "Invalid path" });
   try {
@@ -249,15 +269,17 @@ router.get("/realpath", async (req, res) => {
   try {
     const real = await fs.promises.realpath(resolved);
     // Return path relative to vault root
-    res.json({ path: path.relative(config.vaultPath, real) });
+    res.json({ path: path.relative(req._vaultRoot, real) });
   } catch (e) {
     res.status(500).json({ error: e.message, code: e.code });
   }
 });
 
-// POST /api/fs/utimes { path, atime, mtime }
+// POST /api/fs/utimes { path, atime, mtime, vault? }
 router.post("/utimes", async (req, res) => {
-  const resolved = resolveVaultPath(req.body?.path);
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return;
+  const resolved = resolveVaultPath(vaultRoot, req.body?.path);
   if (!resolved) return res.status(403).json({ error: "Invalid path" });
   try {
     await fs.promises.utimes(
@@ -271,11 +293,13 @@ router.post("/utimes", async (req, res) => {
   }
 });
 
-// GET /api/fs/tree?path=...  -  returns full recursive file tree with metadata
+// GET /api/fs/tree?path=...&vault=...  -  returns full recursive file tree with metadata
 router.get("/tree", async (req, res) => {
+  const vaultRoot = getVaultRoot(req, res);
+  if (!vaultRoot) return;
   const rootPath = req.query.path
-    ? resolveVaultPath(req.query.path)
-    : config.vaultPath;
+    ? resolveVaultPath(vaultRoot, req.query.path)
+    : vaultRoot;
   if (!rootPath) return res.status(403).json({ error: "Invalid path" });
   try {
     const tree = {};

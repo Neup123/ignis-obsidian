@@ -20,18 +20,23 @@ function uint8ToBase64(bytes) {
   return btoa(binary);
 }
 
+function vaultId() {
+  return window.__currentVaultId || "";
+}
+
 async function request(method, endpoint, params = {}) {
   const url = new URL(API_BASE + endpoint, window.location.origin);
 
   const options = { method };
 
   if (method === "GET" || method === "DELETE") {
+    if (vaultId()) url.searchParams.set("vault", vaultId());
     for (const [key, val] of Object.entries(params)) {
       url.searchParams.set(key, val);
     }
   } else {
     options.headers = { "Content-Type": "application/json" };
-    options.body = JSON.stringify(params);
+    options.body = JSON.stringify({ vault: vaultId(), ...params });
   }
 
   const res = await fetch(url.toString(), options);
@@ -57,6 +62,7 @@ function requestSync(method, endpoint, params = {}) {
   const url = new URL(API_BASE + endpoint, window.location.origin);
 
   if (method === "GET") {
+    if (vaultId()) url.searchParams.set("vault", vaultId());
     for (const [key, val] of Object.entries(params)) {
       url.searchParams.set(key, val);
     }
@@ -67,7 +73,7 @@ function requestSync(method, endpoint, params = {}) {
 
   if (method !== "GET") {
     xhr.setRequestHeader("Content-Type", "application/json");
-    xhr.send(JSON.stringify(params));
+    xhr.send(JSON.stringify({ vault: vaultId(), ...params }));
   } else {
     xhr.send();
   }

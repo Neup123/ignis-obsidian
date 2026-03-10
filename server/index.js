@@ -37,7 +37,19 @@ app.use("/api/fs", fsRoutes);
 app.use("/api/vault", vaultRoutes);
 
 // Serve vault files for resource URLs (images, attachments, etc.)
-app.use("/vault-files", express.static(config.vaultPath));
+// Vault ID is the first path segment: /vault-files/<vault-id>/path/to/file
+app.use("/vault-files", (req, res, next) => {
+  // Extract vault ID from the first path segment
+  const parts = req.path.split("/").filter(Boolean);
+  if (parts.length === 0)
+    return res.status(400).json({ error: "Missing vault ID" });
+  const vaultId = decodeURIComponent(parts[0]);
+  const vaultPath = config.getVaultPath(vaultId);
+  if (!vaultPath) return res.status(404).json({ error: "Vault not found" });
+  // Rewrite req.url to strip the vault ID prefix, then serve statically
+  req.url = "/" + parts.slice(1).join("/");
+  express.static(vaultPath)(req, res, next);
+});
 
 // --- Static serving ---
 // dist/ has shim-loader.js + patched index.html (dev mode).
@@ -52,7 +64,10 @@ const server = app.listen(config.port, () => {
   console.log(
     `[obsidian-bridge] Server running on http://localhost:${config.port}`,
   );
-  console.log(`[obsidian-bridge] Vault path: ${config.vaultPath}`);
+  console.log(`[obsidian-bridge] Vault root: ${config.vaultRoot}`);
+  console.log(
+    `[obsidian-bridge] Vaults: ${Object.keys(config.vaults).join(", ")}`,
+  );
 });
 
 setupWebSocket(server);

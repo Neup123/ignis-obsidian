@@ -1,5 +1,4 @@
 node_modules/
 dist/shim-loader.js
 investigation/
-test-vault/
-
+vaults/

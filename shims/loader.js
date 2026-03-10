@@ -114,8 +114,14 @@ if (typeof window.Buffer === "undefined") {
 }
 
 // Prevent app.js from closing the window (browser blocks this anyway, but suppress the error)
+// In an iframe (starter modal), close the modal overlay instead.
 const _origClose = window.close;
 window.close = function () {
+  if (window.parent !== window) {
+    const modal = window.parent.document.getElementById("ignis-starter-modal");
+    if (modal) modal.remove();
+    return;
+  }
   console.log("[obsidian-bridge] window.close() blocked");
 };
 
@@ -132,17 +138,60 @@ window.addEventListener(
   true,
 );
 
+// Read vault ID from URL query param (?vault=my-notes)
+const _urlParams = new URLSearchParams(window.location.search);
+window.__currentVaultId = _urlParams.get("vault") || "";
+
+// Fetch vault config from server synchronously (before metadata cache)
+(function initVaultConfig() {
+  try {
+    const vaultParam = window.__currentVaultId
+      ? "?vault=" + encodeURIComponent(window.__currentVaultId)
+      : "";
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", "/api/vault/info" + vaultParam, false);
+    xhr.send();
+    if (xhr.status === 200) {
+      const info = JSON.parse(xhr.responseText);
+      window.__currentVaultId = info.id;
+      window.__vaultConfig = {
+        id: info.id,
+        path: "/",
+      };
+      console.log("[obsidian-bridge] Vault:", window.__vaultConfig);
+    }
+  } catch (e) {
+    console.error("[obsidian-bridge] Failed to fetch vault config:", e);
+  }
+})();
+
+// Fetch vault list for IPC handlers
+(function initVaultList() {
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", "/api/vault/list", false);
+    xhr.send();
+    if (xhr.status === 200) {
+      window.__vaultList = JSON.parse(xhr.responseText);
+    }
+  } catch (e) {
+    window.__vaultList = [];
+  }
+})();
+
 // Pre-populate fs metadata cache synchronously before app.js runs.
 // This ensures existsSync() works for the vault path during startup.
 (function initMetadataCache() {
   try {
+    const vaultParam = window.__currentVaultId
+      ? "?vault=" + encodeURIComponent(window.__currentVaultId)
+      : "";
     const xhr = new XMLHttpRequest();
-    xhr.open("GET", "/api/fs/tree", false); // synchronous
+    xhr.open("GET", "/api/fs/tree" + vaultParam, false);
     xhr.send();
     if (xhr.status === 200) {
       const tree = JSON.parse(xhr.responseText);
       fsShim._metadataCache.populate(tree);
-      // Also add the root path itself
       fsShim._metadataCache.set("", { type: "directory" });
       fsShim._metadataCache.set("/", { type: "directory" });
       console.log(
@@ -158,26 +207,6 @@ window.addEventListener(
     }
   } catch (e) {
     console.error("[obsidian-bridge] Failed to init metadata cache:", e);
-  }
-})();
-
-// Fetch vault config from server synchronously
-(function initVaultConfig() {
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", "/api/vault/info", false); // synchronous
-    xhr.send();
-    if (xhr.status === 200) {
-      const info = JSON.parse(xhr.responseText);
-      // Set the vault config that sendSync('vault') will return
-      window.__vaultConfig = {
-        id: info.name || "default-vault",
-        path: "/",
-      };
-      console.log("[obsidian-bridge] Vault config:", window.__vaultConfig);
-    }
-  } catch (e) {
-    console.error("[obsidian-bridge] Failed to fetch vault config:", e);
   }
 })();
 

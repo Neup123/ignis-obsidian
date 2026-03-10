@@ -18,6 +18,8 @@
 //   sandbox      → void            -  open sandbox vault
 //   copy-asar    → boolean         -  install update
 
+import { showVaultManager } from "../ui/vault-manager.js";
+
 const listeners = new Map();
 
 // Sync channel handlers  -  must return values synchronously
@@ -25,7 +27,8 @@ const syncHandlers = {
   vault: () => window.__vaultConfig || { id: "default-vault", path: "/" },
   version: () => "1.8.9",
   "is-dev": () => false,
-  "file-url": () => "/vault-files/",
+  "file-url": () =>
+    "/vault-files/" + encodeURIComponent(window.__currentVaultId || "") + "/",
   "disable-update": () => true,
   update: () => "",
   "disable-gpu": () => false,
@@ -36,7 +39,10 @@ const syncHandlers = {
     window.location.reload();
     return null;
   },
-  starter: () => null,
+  starter: () => {
+    showVaultManager();
+    return null;
+  },
   help: () => {
     window.open("https://help.obsidian.md/", "_blank");
     return null;
@@ -44,6 +50,55 @@ const syncHandlers = {
   sandbox: () => null,
   "copy-asar": () => false,
   "check-update": () => null,
+  "vault-list": () => {
+    // Starter expects an object keyed by ID: {id: {path, ts, name}}
+    const result = {};
+    for (const v of window.__vaultList || []) {
+      result[v.id] = {
+        path: "/" + v.id,
+        ts: Date.now(),
+        open: v.id === (window.__currentVaultId || ""),
+      };
+    }
+    return result;
+  },
+  "vault-open": (vaultPath, newWindow) => {
+    const id = (vaultPath || "").replace(/^\/+/, "");
+    const vault = (window.__vaultList || []).find((v) => v.id === id);
+    if (!vault && id) {
+      // New vault created by starter  -  create it on the server
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/vault/create", false);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.send(JSON.stringify({ name: id }));
+      if (xhr.status >= 400) return "Failed to create vault";
+    }
+    // Navigate  -  use parent if in iframe, otherwise current window
+    const target = window.parent !== window ? window.parent : window;
+    target.location.href = "/?vault=" + encodeURIComponent(id);
+    return true;
+  },
+  "vault-remove": (vaultPath) => {
+    const id = (vaultPath || "").replace(/^\/+/, "");
+    const xhr = new XMLHttpRequest();
+    xhr.open(
+      "DELETE",
+      "/api/vault/remove?vault=" + encodeURIComponent(id),
+      false,
+    );
+    xhr.send();
+    return xhr.status < 400;
+  },
+  "vault-move": (oldPath, newPath) => {
+    // Not supported in web context
+    return "Moving vaults is not supported in the web version";
+  },
+  "vault-message": () => null,
+  "get-default-vault-path": () => "/My Vault",
+  "get-documents-path": () => "/",
+  "desktop-dir": () => "/desktop",
+  "documents-dir": () => "/documents",
+  resources: () => "",
 };
 
 export const ipcRenderer = {
