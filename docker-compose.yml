@@ -1,11 +1,14 @@
 services:
   ignis:
-    build:
-      context: .
-      args:
-        OBSIDIAN_VERSION: "1.8.9"
+    build: .
     ports:
       - "8082:8080"
+    environment:
+      - OBSIDIAN_VERSION=1.12.4
     volumes:
       - ./vaults:/vaults
+      - obsidian-app:/app/obsidian-app
     restart: unless-stopped
+
+volumes:
+  obsidian-app:

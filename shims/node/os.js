@@ -46,4 +46,8 @@ export function endianness() {
   return "LE";
 }
 
+export function version() {
+  return "v20.0.0";
+}
+
 export const EOL = "\n";

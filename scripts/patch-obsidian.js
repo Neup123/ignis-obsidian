@@ -2,6 +2,7 @@
 // Patches the extracted Obsidian asar for browser use:
 //   1. Removes Content-Security-Policy meta tag
 //   2. Injects shim-loader.js script (non-deferred, before all other scripts)
+//   3. Injects favicon link
 
 const fs = require("fs");
 const path = require("path");
@@ -24,6 +25,12 @@ function patchHtml(filePath) {
   html = html.replace(
     /\s*<meta\s+http-equiv="Content-Security-Policy"[^>]*>\s*/g,
     "\n",
+  );
+
+  // Inject favicon into <head>
+  html = html.replace(
+    "</head>",
+    '  <link rel="icon" type="image/png" href="favicon.png">\n</head>',
   );
 
   // Inject shim-loader before the first <script> tag

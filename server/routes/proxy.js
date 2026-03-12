@@ -2,7 +2,7 @@ const express = require("express");
 
 const router = express.Router();
 
-// POST /api/proxy  -  forward a request to an external URL (bypasses browser CORS)
+// POST /api/proxy - forward a request to an external URL (bypasses browser CORS)
 // Used by the requestUrl shim for plugin installation, update checks, etc.
 router.post("/", async (req, res) => {
   const { url, method, headers, body, binary } = req.body;

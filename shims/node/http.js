@@ -26,9 +26,14 @@ export function request(options, callback) {
   if (callback) {
     req.once("response", callback);
   }
-  // Immediately error  -  real HTTP requests need fetch or the proxy
+  // Immediately error. real HTTP requests need fetch or the proxy
   setTimeout(() => {
-    req.emit("error", new Error("http.request is not available in the web version. Use requestUrl() instead."));
+    req.emit(
+      "error",
+      new Error(
+        "http.request is not available in the web version. Use requestUrl() instead.",
+      ),
+    );
   }, 0);
   return req;
 }

@@ -79,7 +79,7 @@ export function createFsSync(metadataCache, contentCache, transport) {
       contentCache.delete(path);
       metadataCache.delete(path);
 
-      // Fire-and-forget  -  suppress ENOENT (file already gone)
+      // Fire-and-forget. suppress ENOENT (file already gone)
       transport.unlink(path).catch((e) => {
         if (e.code !== "ENOENT") {
           console.error(
