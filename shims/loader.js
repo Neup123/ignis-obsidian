@@ -146,6 +146,8 @@ window.__currentVaultId = _urlParams.get("vault") || "";
         path: "/",
       };
       console.log("[obsidian-bridge] Vault:", window.__vaultConfig);
+    } else {
+      console.warn("[obsidian-bridge] No vault found, will show manager");
     }
   } catch (e) {
     console.error("[obsidian-bridge] Failed to fetch vault config:", e);

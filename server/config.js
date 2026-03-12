@@ -10,6 +10,13 @@ const vaultRoot =
     ? path.dirname(process.env.VAULT_PATH)
     : path.join(__dirname, "..", "vaults"));
 
+// Ensure vault root exists
+try {
+  fs.mkdirSync(vaultRoot, { recursive: true });
+} catch (e) {
+  console.error("[config] Failed to create VAULT_ROOT:", vaultRoot, e.message);
+}
+
 function discoverVaults() {
   const vaults = {};
   try {
@@ -21,6 +28,17 @@ function discoverVaults() {
     }
   } catch (e) {
     console.error("[config] Failed to read VAULT_ROOT:", vaultRoot, e.message);
+  }
+  // Create a default vault if none exist
+  if (Object.keys(vaults).length === 0) {
+    const defaultPath = path.join(vaultRoot, "My Vault");
+    try {
+      fs.mkdirSync(path.join(defaultPath, ".obsidian"), { recursive: true });
+      vaults["My Vault"] = defaultPath;
+      console.log("[config] Created default vault: My Vault");
+    } catch (e) {
+      console.error("[config] Failed to create default vault:", e.message);
+    }
   }
   return vaults;
 }
