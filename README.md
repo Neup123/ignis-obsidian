@@ -1,6 +1,12 @@
 # Ignis
 
-An Electron shim and server bridge for running Obsidian in a browser.
+An Electron shim and server bridge for running Obsidian in a browser. No VNC required.
+
+# Why
+
+Obsidian is built on Electron but lacks browser access. Existing solutions rely on VNC/remote desktop, which provides a poor user experience. Since Electron is essentially a browser with Node.js integration, it should be possible to create a shim that routes Electron/Node APIs to a server, allowing Obsidian to run as a true web application.
+
+Ignis is a proof of concept testing this approach.
 
 ## How it works
 
