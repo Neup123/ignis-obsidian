@@ -89,6 +89,40 @@ router.post("/create", async (req, res) => {
   }
 });
 
+// POST /api/vault/rename { vault, name } - rename a vault
+router.post("/rename", async (req, res) => {
+  const vaultId = req.body?.vault;
+  const newName = req.body?.name;
+
+  if (!newName || /[\/\\:*?"<>|]/.test(newName)) {
+    return res.status(400).json({ error: "Invalid vault name" });
+  }
+
+  const vaultPath = config.getVaultPath(vaultId);
+
+  if (!vaultPath) {
+    return res.status(404).json({ error: "Vault not found" });
+  }
+
+  const newPath = path.join(config.vaultRoot, newName);
+
+  try {
+    await fs.promises.rename(vaultPath, newPath);
+
+    config.refreshVaults();
+
+    res.json({ ok: true, id: newName, path: newPath });
+  } catch (e) {
+    if (e.code === "ENOTEMPTY" || e.code === "EEXIST") {
+      return res
+        .status(409)
+        .json({ error: "A vault with that name already exists" });
+    }
+
+    res.status(500).json({ error: e.message, code: e.code });
+  }
+});
+
 // DELETE /api/vault/remove?vault=<id> - remove a vault from disk
 router.delete("/remove", async (req, res) => {
   const vaultId = req.query.vault;

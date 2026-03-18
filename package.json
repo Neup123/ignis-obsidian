@@ -4,18 +4,23 @@
   "private": true,
   "description": "An Electron shim and server bridge for running Obsidian in a browser.",
   "scripts": {
+    "build:ui": "node build-ui.js",
     "build:shims": "node build.js",
+    "build": "npm run build:ui && npm run build:shims",
     "dev:server": "node server/index.js",
-    "dev": "npm run build:shims && npm run dev:server"
+    "dev": "npm run build && npm run dev:server"
   },
   "dependencies": {
-    "express": "^4.21.0",
-    "ws": "^8.16.0",
     "chokidar": "^3.6.0",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "esbuild": "^0.20.0",
-    "path-browserify": "^1.0.1"
+    "esbuild-svelte": "^0.9.4",
+    "lucide-svelte": "^0.577.0",
+    "path-browserify": "^1.0.1",
+    "svelte": "^4.2.20"
   }
 }

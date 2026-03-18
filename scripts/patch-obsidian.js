@@ -33,10 +33,11 @@ function patchHtml(filePath) {
     '  <link rel="icon" type="image/png" href="favicon.png">\n</head>',
   );
 
-  // Inject shim-loader before the first <script> tag
+  // Inject ignis-ui and shim-loader before the first <script> tag
   html = html.replace(
     '<script type="text/javascript"',
-    '<script type="text/javascript" src="shim-loader.js"></script>\n' +
+    '<script type="text/javascript" src="ignis-ui.js"></script>\n' +
+      '<script type="text/javascript" src="shim-loader.js"></script>\n' +
       '<script type="text/javascript"',
   );
 

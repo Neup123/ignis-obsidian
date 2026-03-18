@@ -23,6 +23,7 @@ if [ ! -f "$OBSIDIAN_DIR/index.html" ]; then
   echo "[ignis] Patching..."
   node /app/scripts/patch-obsidian.js "$OBSIDIAN_DIR"
 
+  cp /app/dist/ignis-ui.js "$OBSIDIAN_DIR/ignis-ui.js"
   cp /app/dist/shim-loader.js "$OBSIDIAN_DIR/shim-loader.js"
   cp /app/images/favicon.png "$OBSIDIAN_DIR/favicon.png"
 
