@@ -78,16 +78,17 @@ export const vaultService = {
       if (window.__vaultConfig) {
         window.__vaultConfig.id = newName;
       }
+
+      history.replaceState(null, "", "/?vault=" + encodeURIComponent(newName));
     }
 
     return this.listVaults();
   },
 
   async deleteVault(id) {
-    await fetchJson(
-      API_BASE + "/remove?vault=" + encodeURIComponent(id),
-      { method: "DELETE" },
-    );
+    await fetchJson(API_BASE + "/remove?vault=" + encodeURIComponent(id), {
+      method: "DELETE",
+    });
 
     const wasCurrentVault = id === this.getCurrentVaultId();
 

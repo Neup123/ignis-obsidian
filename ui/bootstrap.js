@@ -9,3 +9,66 @@ export function showVaultManager() {
     props: { vaultService },
   });
 }
+
+export function showMessageDialog(title, message) {
+  return new Promise((resolve) => {
+    const dialog = new window.IgnisUI.MessageDialog({
+      target: document.body,
+      props: { title, message },
+    });
+
+    dialog.$on("confirm", () => {
+      dialog.$destroy();
+      resolve();
+    });
+  });
+}
+
+export function showConfirmDialog(
+  title,
+  message,
+  description,
+  confirmText = "OK",
+) {
+  return new Promise((resolve) => {
+    const dialog = new window.IgnisUI.ConfirmDialog({
+      target: document.body,
+      props: { title, message, description, confirmText },
+    });
+
+    dialog.$on("confirm", () => {
+      dialog.$destroy();
+      resolve(true);
+    });
+
+    dialog.$on("cancel", () => {
+      dialog.$destroy();
+      resolve(false);
+    });
+  });
+}
+
+export function showPromptDialog(
+  title,
+  label,
+  placeholder = "",
+  value = "",
+  confirmText = "OK",
+) {
+  return new Promise((resolve) => {
+    const dialog = new window.IgnisUI.PromptDialog({
+      target: document.body,
+      props: { title, label, placeholder, value, confirmText },
+    });
+
+    dialog.$on("confirm", (event) => {
+      dialog.$destroy();
+      resolve(event.detail);
+    });
+
+    dialog.$on("cancel", () => {
+      dialog.$destroy();
+      resolve(null);
+    });
+  });
+}

@@ -12,6 +12,7 @@
   import Modal from "../components/layout/Modal.svelte";
   import PromptDialog from "../components/layout/PromptDialog.svelte";
   import ConfirmDialog from "../components/layout/ConfirmDialog.svelte";
+  import MessageDialog from "../components/layout/MessageDialog.svelte";
   import SearchInput from "../components/input/SearchInput.svelte";
   import Button from "../components/input/Button.svelte";
   import ListItem from "../components/display/ListItem.svelte";
@@ -27,6 +28,8 @@
   let activeDialog = null;
   let targetVault = null;
   let dialogValue = "";
+  let errorMessage = "";
+  let pendingReload = false;
 
   const menuItems = [
     { id: "rename", label: "Rename" },
@@ -108,12 +111,11 @@
 
     try {
       vaults = await vaultService.createVault(name);
+      closeDialog();
     } catch (err) {
-      alert("Failed to create vault: " + err.message);
-      return;
+      errorMessage = "Failed to create vault: " + err.message;
+      activeDialog = "error";
     }
-
-    closeDialog();
   }
 
   async function onRenameConfirm(e) {
@@ -128,15 +130,15 @@
 
     try {
       vaults = await vaultService.renameVault(targetVault.id, trimmed);
+      closeDialog();
+
+      if (wasCurrentVault) {
+        currentVaultId = vaultService.getCurrentVaultId();
+        pendingReload = true;
+      }
     } catch (err) {
-      alert("Failed to rename vault: " + err.message);
-      return;
-    }
-
-    closeDialog();
-
-    if (wasCurrentVault) {
-      currentVaultId = vaultService.getCurrentVaultId();
+      errorMessage = "Failed to rename vault: " + err.message;
+      activeDialog = "error";
     }
   }
 
@@ -154,7 +156,14 @@
         vaultService.openVault("");
       }
     } catch (err) {
-      alert("Failed to delete vault: " + err.message);
+      errorMessage = "Failed to delete vault: " + err.message;
+      activeDialog = "error";
+    }
+  }
+
+  function onModalClose() {
+    if (pendingReload) {
+      window.location.reload();
     }
   }
 
@@ -176,6 +185,7 @@
   width="600px"
   bind:this={modalRef}
   on:escape={onEscape}
+  on:close={onModalClose}
   closeOnOverlayClick={false}
 >
   <svelte:fragment slot="icon">
@@ -270,7 +280,7 @@
   <PromptDialog
     title="Rename Item"
     label="New Name:"
-    confirmText="Save Name"
+    confirmText="Save"
     bind:value={dialogValue}
     on:confirm={onRenameConfirm}
     on:cancel={closeDialog}
@@ -301,6 +311,17 @@
       <Check size="0.875rem" />
     </svelte:fragment>
   </ConfirmDialog>
+{/if}
+
+{#if activeDialog === "error"}
+  <MessageDialog
+    title="Error"
+    message={errorMessage}
+    on:confirm={() => {
+      activeDialog = null;
+      errorMessage = "";
+    }}
+  />
 {/if}
 
 <style>
