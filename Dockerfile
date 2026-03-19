@@ -6,10 +6,12 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
-COPY build.js ./
+COPY build.js build-ui.js ./
 COPY shims/ ./shims/
+COPY services/ ./services/
+COPY ui/ ./ui/
 
-RUN npm run build:shims
+RUN npm run build
 
 # Production image. No Obsidian code included.
 # On first run, the entrypoint downloads and patches Obsidian.
