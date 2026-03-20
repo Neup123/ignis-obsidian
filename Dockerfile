@@ -6,10 +6,8 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
-COPY build.js build-ui.js ./
-COPY shims/ ./shims/
-COPY services/ ./services/
-COPY ui/ ./ui/
+COPY build.js ./
+COPY src/ ./src/
 
 RUN npm run build
 

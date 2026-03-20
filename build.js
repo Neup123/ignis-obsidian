@@ -1,15 +1,34 @@
-const esbuild = require('esbuild');
-const path = require('path');
+const esbuild = require("esbuild");
+const sveltePlugin = require("esbuild-svelte");
+const path = require("path");
 
-esbuild.build({
-  entryPoints: [path.join(__dirname, 'shims', 'loader.js')],
-  bundle: true,
-  outfile: path.join(__dirname, 'dist', 'shim-loader.js'),
-  format: 'iife',
-  platform: 'browser',
-  target: ['chrome90'],
-  alias: {
-    'path': 'path-browserify',
-  },
-  logLevel: 'info',
-}).catch(() => process.exit(1));
+Promise.all([
+  // Build shim-loader.js
+  esbuild.build({
+    entryPoints: [path.join(__dirname, "src", "shims", "loader.js")],
+    bundle: true,
+    outfile: path.join(__dirname, "dist", "shim-loader.js"),
+    format: "iife",
+    platform: "browser",
+    target: ["chrome90"],
+    alias: {
+      path: "path-browserify",
+    },
+    logLevel: "info",
+  }),
+
+  // Build ignis-ui.js
+  esbuild.build({
+    entryPoints: [path.join(__dirname, "src", "ui", "index.js")],
+    bundle: true,
+    outfile: path.join(__dirname, "dist", "ignis-ui.js"),
+    format: "iife",
+    globalName: "IgnisUI",
+    platform: "browser",
+    target: ["chrome90"],
+    mainFields: ["svelte", "browser", "module", "main"],
+    conditions: ["svelte", "browser"],
+    plugins: [sveltePlugin({ compilerOptions: { css: "injected" } })],
+    logLevel: "info",
+  }),
+]).catch(() => process.exit(1));
