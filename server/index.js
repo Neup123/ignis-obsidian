@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const compression = require("compression");
 const config = require("./config");
 const { setupWebSocket } = require("./ws");
 const { installPluginInAllVaults } = require("./install-plugin");
@@ -12,6 +13,7 @@ const ANSI_RESET = "\x1b[0m";
 const app = express();
 
 app.use(express.json({ limit: "50mb" }));
+app.use(compression());
 
 // logger middleware
 app.use((req, res, next) => {
