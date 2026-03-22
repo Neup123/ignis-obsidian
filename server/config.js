@@ -3,12 +3,8 @@ const fs = require("fs");
 
 // VAULT_ROOT: a directory that contains vault folders.
 // Each subdirectory is a vault. New vaults are created as new subdirs.
-// Falls back to parent of VAULT_PATH (single-vault compatibility) or ./vaults.
 const vaultRoot =
-  process.env.VAULT_ROOT ||
-  (process.env.VAULT_PATH
-    ? path.dirname(process.env.VAULT_PATH)
-    : path.join(__dirname, "..", "vaults"));
+  process.env.VAULT_ROOT || path.join(__dirname, "..", "vaults");
 
 // Ensure vault root exists
 try {
