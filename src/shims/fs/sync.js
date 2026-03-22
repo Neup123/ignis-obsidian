@@ -1,3 +1,5 @@
+import { markLocalOp } from "./echo-guard.js";
+
 export function createFsSync(metadataCache, contentCache, transport) {
   return {
     existsSync(path) {
@@ -64,6 +66,7 @@ export function createFsSync(metadataCache, contentCache, transport) {
         encoding = encoding?.encoding;
       }
 
+      markLocalOp(path);
       contentCache.set(path, data);
 
       const size =
@@ -87,6 +90,7 @@ export function createFsSync(metadataCache, contentCache, transport) {
     },
 
     unlinkSync(path) {
+      markLocalOp(path);
       contentCache.delete(path);
       metadataCache.delete(path);
 

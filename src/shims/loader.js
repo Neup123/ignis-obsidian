@@ -259,4 +259,9 @@ window.__currentVaultId =
 
 installRequestUrlShim();
 
+// Connect file watcher WebSocket after everything is initialized
+if (window.__currentVaultId) {
+  fsShim._watcherClient.connect(window.__currentVaultId);
+}
+
 console.log("[ignis] Shim loader initialized");

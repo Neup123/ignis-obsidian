@@ -4,6 +4,7 @@ import { transport } from "./transport.js";
 import { createFsPromises } from "./promises.js";
 import { createFsSync } from "./sync.js";
 import { createFsWatch } from "./watch.js";
+import { createWatcherClient } from "./watcher-client.js";
 import { constants } from "./constants.js";
 
 const metadataCache = new MetadataCache();
@@ -12,6 +13,7 @@ const contentCache = new ContentCache();
 const fsPromises = createFsPromises(metadataCache, contentCache, transport);
 const fsSync = createFsSync(metadataCache, contentCache, transport);
 const fsWatch = createFsWatch(transport);
+const watcherClient = createWatcherClient(metadataCache, contentCache, fsWatch);
 
 export const fsShim = {
   promises: fsPromises,
@@ -29,6 +31,7 @@ export const fsShim = {
 
   _metadataCache: metadataCache,
   _contentCache: contentCache,
+  _watcherClient: watcherClient,
 
   async _init(basePath) {
     const tree = await transport.fetchTree(basePath);

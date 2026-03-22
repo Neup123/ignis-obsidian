@@ -1,24 +1,40 @@
 const { WebSocketServer } = require("ws");
+const url = require("url");
+const config = require("./config");
+const watcher = require("./watcher");
 
-//currently unused
 function setupWebSocket(server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
-  wss.on("connection", (ws) => {
-    console.log("[ws] Client connected");
+  wss.on("connection", (ws, req) => {
+    const params = new url.URL(req.url, "http://localhost").searchParams;
+    const vaultId = params.get("vault");
 
-    ws.on("message", (data) => {
-      // TODO: handle watch/unwatch subscriptions from client
-      const msg = JSON.parse(data);
-      console.log("[ws] Received:", msg);
-    });
+    if (!vaultId || !config.getVaultPath(vaultId)) {
+      ws.close(4001, "Invalid or missing vault ID");
+      return;
+    }
+
+    const vaultPath = config.getVaultPath(vaultId);
+    console.log(`[ws] Client connected to vault: ${vaultId}`);
+
+    // Start watching this vault (no-op if already watching)
+    watcher.startWatching(vaultId, vaultPath);
+
+    // Per-client listener that forwards events over WebSocket
+    const listener = (event) => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify(event));
+      }
+    };
+
+    watcher.addListener(vaultId, listener);
 
     ws.on("close", () => {
-      console.log("[ws] Client disconnected");
+      console.log(`[ws] Client disconnected from vault: ${vaultId}`);
+      watcher.removeListener(vaultId, listener);
     });
   });
-
-  // TODO: maybe integrate chokidar file watching and broadcast changes
 
   return wss;
 }

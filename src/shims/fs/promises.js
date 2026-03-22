@@ -1,3 +1,5 @@
+import { markLocalOp } from "./echo-guard.js";
+
 export function createFsPromises(metadataCache, contentCache, transport) {
   return {
     async stat(path) {
@@ -85,6 +87,7 @@ export function createFsPromises(metadataCache, contentCache, transport) {
         encoding = encoding?.encoding;
       }
 
+      markLocalOp(path);
       contentCache.set(path, data);
 
       const size =
@@ -110,6 +113,7 @@ export function createFsPromises(metadataCache, contentCache, transport) {
     },
 
     async appendFile(path, data, encoding) {
+      markLocalOp(path);
       contentCache.invalidate(path);
 
       await transport.appendFile(path, data);
@@ -119,6 +123,7 @@ export function createFsPromises(metadataCache, contentCache, transport) {
     },
 
     async unlink(path) {
+      markLocalOp(path);
       contentCache.delete(path);
       metadataCache.delete(path);
 
@@ -126,6 +131,8 @@ export function createFsPromises(metadataCache, contentCache, transport) {
     },
 
     async rename(oldPath, newPath) {
+      markLocalOp(oldPath);
+      markLocalOp(newPath);
       const content = contentCache.get(oldPath);
 
       if (content !== null) {
@@ -142,12 +149,14 @@ export function createFsPromises(metadataCache, contentCache, transport) {
       const recursive =
         typeof options === "object" ? !!options.recursive : !!options;
 
+      markLocalOp(path);
       metadataCache.set(path, { type: "directory" });
 
       await transport.mkdir(path, recursive);
     },
 
     async rmdir(path) {
+      markLocalOp(path);
       metadataCache.delete(path);
       await transport.rmdir(path);
     },
@@ -156,6 +165,7 @@ export function createFsPromises(metadataCache, contentCache, transport) {
       const recursive =
         typeof options === "object" ? !!options.recursive : false;
 
+      markLocalOp(path);
       metadataCache.delete(path);
       contentCache.delete(path);
 
@@ -163,6 +173,7 @@ export function createFsPromises(metadataCache, contentCache, transport) {
     },
 
     async copyFile(src, dest) {
+      markLocalOp(dest);
       await transport.copyFile(src, dest);
 
       const meta = await transport.stat(dest);
