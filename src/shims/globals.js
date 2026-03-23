@@ -1,0 +1,110 @@
+import { processShim } from "./process.js";
+import {
+  registerPopupWindow,
+  unregisterPopupWindow,
+} from "./electron/remote/window.js";
+import { showVaultManager } from "../ui/bootstrap.js";
+
+function installProcess() {
+  window.process = processShim;
+}
+
+function installBuffer() {
+  if (typeof window.Buffer !== "undefined") return;
+
+  window.Buffer = {
+    from: function (data, encoding) {
+      if (typeof data === "string") {
+        return new TextEncoder().encode(data);
+      }
+
+      if (data instanceof ArrayBuffer) {
+        return new Uint8Array(data);
+      }
+
+      return new Uint8Array(data);
+    },
+    concat: function (arrays) {
+      const total = arrays.reduce((sum, a) => sum + a.length, 0);
+      const result = new Uint8Array(total);
+      let offset = 0;
+
+      for (const arr of arrays) {
+        result.set(arr, offset);
+        offset += arr.length;
+      }
+
+      return result;
+    },
+    isBuffer: function (obj) {
+      return obj instanceof Uint8Array;
+    },
+  };
+}
+
+function installWindowClose() {
+  window.close = function () {
+    console.log("[ignis] window.close() blocked");
+    if (!window.__vaultConfig) {
+      showVaultManager();
+    }
+  };
+}
+
+function installWindowOpen() {
+  window.__popupIframe = null;
+  const _originalOpen = window.open;
+
+  window.open = function (url, target, features) {
+    if (url === "about:blank" || (features && features.includes("popup"))) {
+      console.log("[ignis] intercepted popup:", url, features);
+
+      registerPopupWindow();
+
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText =
+        "position:fixed;left:-9999px;width:0;height:0;border:none;";
+
+      document.body.appendChild(iframe);
+      window.__popupIframe = iframe;
+
+      const iframeWin = iframe.contentWindow;
+
+      iframeWin.require = window.require;
+      iframeWin.module = window.module;
+      iframeWin.Buffer = window.Buffer;
+      iframeWin.process = window.process;
+      iframeWin.global = iframeWin;
+      iframeWin.globalEnhance = window.globalEnhance;
+
+      iframeWin.close = function () {
+        unregisterPopupWindow();
+        iframe.remove();
+        window.__popupIframe = null;
+      };
+
+      return iframeWin;
+    }
+    return _originalOpen.call(window, url, target, features);
+  };
+}
+
+function installContextMenuFix() {
+  // hacky fix to prevent browser from showing context menu while allowing obsidian context menu
+  window.addEventListener(
+    "contextmenu",
+    (e) => {
+      e.preventDefault();
+      Object.defineProperty(e, "defaultPrevented", { get: () => false });
+    },
+    true,
+  );
+}
+
+export function installGlobals() {
+  installProcess();
+  installBuffer();
+  installWindowClose();
+  installWindowOpen();
+  installContextMenuFix();
+}
