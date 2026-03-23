@@ -88,12 +88,17 @@ for (const [name, shim] of Object.entries(rawRegistry)) {
 const throwOnRequire = new Set(["btime", "get-fonts", "vibrancy-win"]);
 
 window.require = function (moduleName) {
-  if (throwOnRequire.has(moduleName)) {
+  // Strip node: prefix if present
+  const normalizedName = moduleName.startsWith("node:")
+    ? moduleName.slice(5)
+    : moduleName;
+
+  if (throwOnRequire.has(normalizedName)) {
     throw new Error(`Cannot find module '${moduleName}'`);
   }
 
-  if (shimRegistry[moduleName]) {
-    return shimRegistry[moduleName];
+  if (shimRegistry[normalizedName]) {
+    return shimRegistry[normalizedName];
   }
 
   console.warn("[ignis] Unshimmed require:", moduleName);
