@@ -5,6 +5,7 @@ import { createFsPromises } from "./promises.js";
 import { createFsSync } from "./sync.js";
 import { createFsWatch } from "./watch.js";
 import { createWatcherClient } from "./watcher-client.js";
+import { createFdOps } from "./fd.js";
 import { constants } from "./constants.js";
 
 const metadataCache = new MetadataCache();
@@ -14,6 +15,7 @@ const fsPromises = createFsPromises(metadataCache, contentCache, transport);
 const fsSync = createFsSync(metadataCache, contentCache, transport);
 const fsWatch = createFsWatch(transport);
 const watcherClient = createWatcherClient(metadataCache, contentCache, fsWatch);
+const fdOps = createFdOps(metadataCache, contentCache, transport);
 
 export const fsShim = {
   promises: fsPromises,
@@ -25,6 +27,15 @@ export const fsShim = {
   accessSync: fsSync.accessSync,
   statSync: fsSync.statSync,
   readdirSync: fsSync.readdirSync,
+
+  open: fdOps.open,
+  openSync: fdOps.openSync,
+  read: fdOps.read,
+  readSync: fdOps.readSync,
+  close: fdOps.close,
+  closeSync: fdOps.closeSync,
+  fstat: fdOps.fstat,
+  fstatSync: fdOps.fstatSync,
 
   watch: fsWatch.watch,
   constants,

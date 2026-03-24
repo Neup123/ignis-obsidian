@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const compression = require("compression");
 const config = require("./config");
 const { setupWebSocket } = require("./ws");
 const { installPluginInAllVaults } = require("./install-plugin");
@@ -12,6 +13,7 @@ const ANSI_RESET = "\x1b[0m";
 const app = express();
 
 app.use(express.json({ limit: "50mb" }));
+app.use(compression());
 
 // logger middleware
 app.use((req, res, next) => {
@@ -43,10 +45,12 @@ app.use((req, res, next) => {
 const fsRoutes = require("./routes/fs");
 const vaultRoutes = require("./routes/vault");
 const proxyRoutes = require("./routes/proxy");
+const versionRoutes = require("./routes/version");
 
 app.use("/api/fs", fsRoutes);
 app.use("/api/vault", vaultRoutes);
 app.use("/api/proxy", proxyRoutes);
+app.use("/api/version", versionRoutes);
 
 // Serve vault files for resource URLs (images, attachments, etc.)
 // Vault ID is the first path segment: /vault-files/<vault-id>/path/to/file
@@ -68,6 +72,20 @@ app.use("/vault-files", (req, res, next) => {
   // Rewrite req.url to strip the vault ID prefix, then serve statically
   req.url = "/" + parts.slice(1).join("/");
   express.static(vaultPath)(req, res, next);
+});
+
+// Serve dist files with cache headers based on version param
+app.use((req, res, next) => {
+  if (req.path.match(/\/(ignis-ui|shim-loader)\.js$/)) {
+    if (req.query.v) {
+      // Versioned assets - cache for 1 year
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    } else {
+      // No version param - short cache for dev/fallback
+      res.setHeader("Cache-Control", "public, max-age=300");
+    }
+  }
+  next();
 });
 
 app.use(express.static(path.join(__dirname, "..", "dist")));

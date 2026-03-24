@@ -3,12 +3,8 @@ const fs = require("fs");
 
 // VAULT_ROOT: a directory that contains vault folders.
 // Each subdirectory is a vault. New vaults are created as new subdirs.
-// Falls back to parent of VAULT_PATH (single-vault compatibility) or ./vaults.
 const vaultRoot =
-  process.env.VAULT_ROOT ||
-  (process.env.VAULT_PATH
-    ? path.dirname(process.env.VAULT_PATH)
-    : path.join(__dirname, "..", "vaults"));
+  process.env.VAULT_ROOT || path.join(__dirname, "..", "vaults");
 
 // Ensure vault root exists
 try {
@@ -32,8 +28,11 @@ function discoverVaults() {
     console.error("[config] Failed to read VAULT_ROOT:", vaultRoot, e.message);
   }
 
-  // Create a default vault if none exist
-  if (Object.keys(vaults).length === 0) {
+  // Optionally create a default vault if none exist
+  if (
+    Object.keys(vaults).length === 0 &&
+    process.env.AUTO_CREATE_DEFAULT === "true"
+  ) {
     const defaultPath = path.join(vaultRoot, "My Vault");
 
     try {

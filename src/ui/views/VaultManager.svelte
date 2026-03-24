@@ -30,6 +30,7 @@
   let dialogValue = "";
   let errorMessage = "";
   let pendingReload = false;
+  let version = "";
 
   const menuItems = [
     { id: "rename", label: "Rename" },
@@ -46,6 +47,16 @@
         v.name.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : vaults;
+
+  async function fetchVersion() {
+    try {
+      const res = await fetch("/api/version");
+      const data = await res.json();
+      version = data.version;
+    } catch (e) {
+      console.warn("[VaultManager] Failed to fetch version:", e);
+    }
+  }
 
   async function refreshVaults() {
     try {
@@ -177,6 +188,7 @@
 
   onMount(() => {
     refreshVaults();
+    fetchVersion();
   });
 </script>
 
@@ -246,6 +258,11 @@
   </div>
 
   <svelte:fragment slot="footer">
+    <div class="footer-left">
+      {#if version}
+        <span class="version-info">Ignis v{version}</span>
+      {/if}
+    </div>
     <div class="footer-right">
       <Button variant="ghost" on:click={showCreateDialog}>
         <svelte:fragment slot="icon">
@@ -400,8 +417,19 @@
     white-space: nowrap;
   }
 
+  .footer-left {
+    display: flex;
+    align-items: center;
+  }
+
   .footer-right {
     display: flex;
     justify-content: flex-end;
+  }
+
+  .version-info {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    user-select: none;
   }
 </style>
