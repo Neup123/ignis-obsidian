@@ -49,19 +49,17 @@ async function installPluginInVault(vaultPath) {
     return false;
   }
 
-  if (!(await fs.promises.stat(pluginDir).catch(() => null))) {
-    await fs.promises.mkdir(pluginDir, { recursive: true });
+  await fs.promises.mkdir(pluginDir, { recursive: true });
 
-    const pluginSrcDir = path.join(__dirname, "..", "plugin");
-    await fs.promises.copyFile(
-      path.join(pluginSrcDir, "manifest.json"),
-      path.join(pluginDir, "manifest.json"),
-    );
-    await fs.promises.copyFile(
-      path.join(pluginSrcDir, "main.js"),
-      path.join(pluginDir, "main.js"),
-    );
-  }
+  const pluginSrcDir = path.join(__dirname, "..", "plugin");
+  await fs.promises.copyFile(
+    path.join(pluginSrcDir, "manifest.json"),
+    path.join(pluginDir, "manifest.json"),
+  );
+  await fs.promises.copyFile(
+    path.join(pluginSrcDir, "main.js"),
+    path.join(pluginDir, "main.js"),
+  );
 
   const pluginsConfig = path.join(obsidianDir, "community-plugins.json");
   let plugins = [];

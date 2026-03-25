@@ -1,9 +1,58 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const archiver = require("archiver");
 const config = require("../config");
 
 const router = express.Router();
+
+/**
+ * Encode a filename for use in Content-Disposition header.
+ * Handles non-ASCII characters and special characters to prevent header injection.
+ * Uses RFC 5987 encoding for filename* parameter when needed.
+ *
+ * @param {string} filename - The filename to encode
+ * @returns {string} - Properly formatted Content-Disposition value
+ */
+function encodeContentDispositionFilename(filename) {
+  // Check if filename contains non-ASCII characters
+  const hasNonASCII = /[^\x00-\x7F]/.test(filename);
+
+  // Escape quotes and backslashes in ASCII filename by prefixing with backslash
+  const escapedFilename = filename.replace(/["\\ ]/g, function (match) {
+    if (match === '"') return '\\"';
+    if (match === "\\") return "\\\\";
+    return match;
+  });
+
+  // Remove any control characters that could cause header injection
+  const sanitizedFilename = escapedFilename.replace(/[\x00-\x1F\x7F]/g, "");
+
+  if (!hasNonASCII) {
+    // Simple ASCII filename - use standard format
+    return `attachment; filename="${sanitizedFilename}"`;
+  }
+
+  // Non-ASCII filename - use RFC 5987 encoding
+  // Encode using percent-encoding for UTF-8
+  const encodedFilename = encodeURIComponent(filename)
+    .replace(/['()]/g, function (c) {
+      return "%" + c.charCodeAt(0).toString(16).toUpperCase();
+    })
+    .replace(/\*/g, "%2A");
+
+  // Provide both filename (ASCII fallback) and filename* (UTF-8 encoded)
+  // For fallback, replace non-ASCII with underscores
+  const asciiFallback = filename
+    .replace(/[^\x00-\x7F]/g, "_")
+    .replace(/["\\ ]/g, function (match) {
+      if (match === '"') return '\\"';
+      if (match === "\\") return "\\\\";
+      return match;
+    });
+
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
+}
 
 // Resolve the vault root for a request. Reads vault ID from query or body.
 function getVaultRoot(req, res) {
@@ -210,7 +259,9 @@ router.post("/mkdir", async (req, res) => {
   }
 
   try {
-    await fs.promises.mkdir(resolved, { recursive: !!req.body.recursive });
+    await fs.promises.mkdir(resolved, {
+      recursive: !!req.body.recursive,
+    });
 
     res.json({ ok: true });
   } catch (e) {
@@ -397,7 +448,9 @@ router.get("/tree", async (req, res) => {
     const tree = {};
 
     async function walk(dir, prefix) {
-      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      const entries = await fs.promises.readdir(dir, {
+        withFileTypes: true,
+      });
 
       for (const entry of entries) {
         const rel = prefix ? prefix + "/" + entry.name : entry.name;
@@ -425,6 +478,74 @@ router.get("/tree", async (req, res) => {
     res.json(tree);
   } catch (e) {
     res.status(500).json({ error: e.message, code: e.code });
+  }
+});
+
+// GET /api/fs/download?path=...&vault=...
+router.get("/download", async (req, res) => {
+  const resolved = guardPath(req, res);
+
+  if (!resolved) {
+    return;
+  }
+
+  try {
+    const stat = await fs.promises.stat(resolved);
+
+    if (stat.isDirectory()) {
+      return res
+        .status(400)
+        .json({ error: "Use /download-zip for directories" });
+    }
+
+    const filename = path.basename(resolved);
+    res.setHeader(
+      "Content-Disposition",
+      encodeContentDispositionFilename(filename),
+    );
+    res.sendFile(resolved);
+  } catch (e) {
+    res
+      .status(e.code === "ENOENT" ? 404 : 500)
+      .json({ error: e.message, code: e.code });
+  }
+});
+
+// GET /api/fs/download-zip?path=...&vault=...
+router.get("/download-zip", async (req, res) => {
+  const resolved = guardPath(req, res);
+
+  if (!resolved) {
+    return;
+  }
+
+  try {
+    const stat = await fs.promises.stat(resolved);
+
+    if (!stat.isDirectory()) {
+      return res.status(400).json({ error: "Not a directory" });
+    }
+
+    const folderName = path.basename(resolved);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      encodeContentDispositionFilename(folderName + ".zip"),
+    );
+
+    const archive = archiver("zip", { zlib: { level: 5 } });
+
+    archive.on("error", (err) => {
+      res.status(500).end();
+    });
+
+    archive.pipe(res);
+    archive.directory(resolved, folderName);
+    archive.finalize();
+  } catch (e) {
+    res
+      .status(e.code === "ENOENT" ? 404 : 500)
+      .json({ error: e.message, code: e.code });
   }
 });
 

@@ -1,4 +1,21 @@
-const { Plugin, Notice, TFolder } = require("obsidian");
+const { Plugin, Notice, TFile, TFolder } = require("obsidian");
+
+function getVaultId() {
+  return window.__currentVaultId || "";
+}
+
+function triggerDownload(endpoint, filePath, downloadName) {
+  const vaultId = getVaultId();
+  const url =
+    `/api/fs/${endpoint}` +
+    `?vault=${encodeURIComponent(vaultId)}` +
+    `&path=${encodeURIComponent(filePath)}`;
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = downloadName;
+  a.click();
+}
 
 class IgnisBridgePlugin extends Plugin {
   async onload() {
@@ -10,18 +27,40 @@ class IgnisBridgePlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
-        if (file instanceof TFolder) {
-          menu.addItem((item) => {
-            item
-              .setTitle("Upload file")
-              .setIcon("upload")
-              .onClick(() => {
-                this.showFilePicker(file);
-              });
-          });
+        if (file instanceof TFile) {
+          this.addFileMenuItems(menu, file);
+        } else if (file instanceof TFolder) {
+          this.addFolderMenuItems(menu, file);
         }
-      })
+      }),
     );
+  }
+
+  addFileMenuItems(menu, file) {
+    menu.addItem((item) => {
+      item
+        .setTitle("Download")
+        .setIcon("download")
+        .onClick(() => triggerDownload("download", file.path, file.name));
+    });
+  }
+
+  addFolderMenuItems(menu, folder) {
+    menu.addItem((item) => {
+      item
+        .setTitle("Download as ZIP")
+        .setIcon("download")
+        .onClick(() =>
+          triggerDownload("download-zip", folder.path, `${folder.name}.zip`),
+        );
+    });
+
+    menu.addItem((item) => {
+      item
+        .setTitle("Upload file")
+        .setIcon("upload")
+        .onClick(() => this.showFilePicker(folder));
+    });
   }
 
   showFilePicker(targetFolder = null) {
