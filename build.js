@@ -31,4 +31,16 @@ Promise.all([
     plugins: [sveltePlugin({ compilerOptions: { css: "injected" } })],
     logLevel: "info",
   }),
+
+  // Build ignis-bridge plugin
+  esbuild.build({
+    entryPoints: [path.join(__dirname, "plugin", "src", "main.js")],
+    bundle: true,
+    outfile: path.join(__dirname, "plugin", "main.js"),
+    format: "cjs",
+    platform: "browser",
+    target: ["chrome90"],
+    external: ["obsidian"],
+    logLevel: "info",
+  }),
 ]).catch(() => process.exit(1));
