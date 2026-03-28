@@ -1,9 +1,25 @@
+const { setIcon } = require("obsidian");
 const generalTab = require("./general-tab");
 const serverPluginsTab = require("./server-plugins-tab");
 
 function createNavEl(tab, setting) {
   const nav = document.createElement("div");
   nav.className = "vertical-tab-nav-item tappable";
+
+  if (tab.icon) {
+    const iconEl = document.createElement("div");
+    iconEl.className = "vertical-tab-nav-item-icon";
+
+    if (tab.icon.startsWith("<svg") || tab.icon.startsWith("<img")) {
+      iconEl.innerHTML = tab.icon;
+    } else if (tab.icon.endsWith(".svg") || tab.icon.endsWith(".webp") || tab.icon.endsWith(".png")) {
+      iconEl.innerHTML = `<img src="${tab.icon}" class="svg-icon" width="24" height="24" />`;
+    } else {
+      setIcon(iconEl, tab.icon);
+    }
+
+    nav.appendChild(iconEl);
+  }
 
   const title = document.createElement("div");
   title.className = "vertical-tab-nav-item-title";
@@ -21,10 +37,11 @@ function createNavEl(tab, setting) {
   return nav;
 }
 
-function createTab(id, name, displayFn, app) {
+function createTab(id, name, displayFn, app, icon) {
   const tab = {
     id,
     name,
+    icon: icon || null,
     containerEl: createDiv("vertical-tab-content"),
     navEl: null,
 
@@ -61,12 +78,13 @@ function injectIgnisSettings(setting, app) {
   const ignis = createGroup("Ignis");
 
   const tabs = [
-    createTab("ignis-general", "General", generalTab.display, app),
+    createTab("ignis-general", "General", generalTab.display, app, "flame"),
     createTab(
       "ignis-core-plugins",
       "Core plugins",
       serverPluginsTab.display,
       app,
+      "blocks",
     ),
   ];
 
