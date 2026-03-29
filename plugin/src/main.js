@@ -1,6 +1,7 @@
 const { Plugin, TFile, TFolder } = require("obsidian");
 const { showFilePicker, addFileMenuItems, addFolderMenuItems } = require("./file-actions");
 const { patchSettingsModal, unpatchSettingsModal } = require("./settings/inject");
+const pluginRegistry = require("./plugin-registry");
 
 window.__obsidianAPI = require("obsidian");
 
@@ -8,6 +9,7 @@ class IgnisBridgePlugin extends Plugin {
   async onload() {
     console.log("[ignis-bridge] Plugin loaded");
 
+    await pluginRegistry.refresh();
     patchSettingsModal(this);
 
     this.addRibbonIcon("upload", "Upload file", () => {
