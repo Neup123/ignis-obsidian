@@ -1,5 +1,5 @@
 # Build shim-loader.js
-FROM node:20-slim AS build
+FROM node:22-slim AS build
 
 WORKDIR /build
 
@@ -15,7 +15,7 @@ RUN npm run build
 
 # Production image. No Obsidian code included.
 # On first run, the entrypoint downloads and patches Obsidian.
-FROM node:20-slim
+FROM node:22-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates curl binutils xz-utils gosu \

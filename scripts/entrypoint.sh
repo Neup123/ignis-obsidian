@@ -57,6 +57,27 @@ node /app/scripts/patch-obsidian.js "$OBSIDIAN_DIR"
 cp /app/dist/ignis-ui.js "$OBSIDIAN_DIR/ignis-ui.js"
 cp /app/dist/shim-loader.js "$OBSIDIAN_DIR/shim-loader.js"
 cp /app/images/favicon.png "$OBSIDIAN_DIR/favicon.png"
+cp /app/server/assets/* "$OBSIDIAN_DIR/" 2>/dev/null || true
+
+# Install obsidian-headless (ob CLI) if not already present.
+# Not included in the image for legal reasons - installed at runtime.
+if ! command -v ob &>/dev/null; then
+  echo "[ignis] Installing obsidian-headless..."
+
+  if npm install -g --prefix /usr/local obsidian-headless --silent 2>/dev/null; then
+    OB_VERSION=$(ob --version 2>/dev/null)
+
+    if [ -n "$OB_VERSION" ]; then
+      echo "[ignis] obsidian-headless $OB_VERSION installed."
+    else
+      echo "[ignis] WARNING: obsidian-headless installed but 'ob' command not working."
+    fi
+  else
+    echo "[ignis] WARNING: Failed to install obsidian-headless. Headless sync will not be available."
+  fi
+else
+  echo "[ignis] obsidian-headless $(ob --version 2>/dev/null) available."
+fi
 
 # Run as the determined user
 exec gosu "$RUN_USER" node /app/server/index.js
