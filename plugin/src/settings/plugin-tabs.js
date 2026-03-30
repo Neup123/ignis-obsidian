@@ -2,23 +2,20 @@ const { setIcon } = require("obsidian");
 const { findGroupByTitle } = require("./settings-ui");
 const { isIgnisPlugin } = require("../plugin-registry");
 
-// Tracks our own nav items in the "Ignis Core Plugins" group, keyed by plugin ID.
-const ownedNavItems = new Map();
+// Tracks which plugin IDs have nav items we created.
+const ownedPluginIds = new Set();
 
-function addPluginNavItem(pluginId, setting, corePluginsItems) {
-  // Find the tab object Obsidian created for this plugin.
+function addPluginNavItem(pluginId, setting, corePluginsItems, ignisNavEls) {
   const tab = setting.pluginTabs.find((t) => t.id === pluginId);
 
   if (!tab) {
     return;
   }
 
-  // Don't add if we already have one for this ID.
-  if (ownedNavItems.has(pluginId)) {
+  if (ownedPluginIds.has(pluginId)) {
     return;
   }
 
-  // Create our own nav item that delegates to Obsidian's tab.
   const nav = document.createElement("div");
   nav.className = "vertical-tab-nav-item tappable";
 
@@ -43,15 +40,17 @@ function addPluginNavItem(pluginId, setting, corePluginsItems) {
   });
 
   corePluginsItems.appendChild(nav);
-  ownedNavItems.set(pluginId, nav);
+  ownedPluginIds.add(pluginId);
+  ignisNavEls.set(pluginId, nav);
 }
 
-function removePluginNavItem(pluginId) {
-  const nav = ownedNavItems.get(pluginId);
+function removePluginNavItem(pluginId, ignisNavEls) {
+  const nav = ignisNavEls.get(pluginId);
 
-  if (nav) {
+  if (nav && ownedPluginIds.has(pluginId)) {
     nav.remove();
-    ownedNavItems.delete(pluginId);
+    ownedPluginIds.delete(pluginId);
+    ignisNavEls.delete(pluginId);
   }
 }
 
@@ -104,14 +103,12 @@ function hideIgnisNavFromCommunityGroup(setting) {
     return;
   }
 
-  // Hide any ignis plugin nav items that Obsidian placed here.
   for (const tab of setting.pluginTabs) {
     if (isIgnisPlugin(tab.id) && tab.navEl?.parentElement === items) {
       tab.navEl.style.display = "none";
     }
   }
 
-  // Hide the entire group if no visible items remain.
   const hasVisible = Array.from(items.children).some(
     (el) => el.style.display !== "none",
   );
@@ -119,45 +116,40 @@ function hideIgnisNavFromCommunityGroup(setting) {
   communityGroup.style.display = hasVisible ? "" : "none";
 }
 
-function hideCorePluginsGroupIfEmpty() {
-  for (const [, nav] of ownedNavItems) {
-    if (nav.isConnected) {
-      const group = nav.closest(".vertical-tab-header-group");
+function hideCorePluginsGroupIfEmpty(ignisNavEls) {
+  let hasConnected = false;
 
-      if (group) {
-        group.style.display = "";
-      }
+  for (const id of ownedPluginIds) {
+    const nav = ignisNavEls.get(id);
 
-      return;
+    if (nav?.isConnected) {
+      hasConnected = true;
+      break;
     }
   }
 
-  // No connected items -- find and hide the group.
   const groups = document.querySelectorAll(".vertical-tab-header-group");
 
   for (const g of groups) {
     const title = g.querySelector(".vertical-tab-header-group-title");
 
     if (title?.textContent === "Ignis Core Plugins") {
-      g.style.display = ownedNavItems.size > 0 ? "" : "none";
+      g.style.display = hasConnected ? "" : "none";
       break;
     }
   }
 }
 
-function setupPluginTabs(setting, corePluginsItems) {
-  // Create our own nav items for ignis plugin tabs.
+function setupPluginTabs(setting, corePluginsItems, ignisNavEls) {
   for (const tab of setting.pluginTabs) {
     if (isIgnisPlugin(tab.id) && tab.id !== "ignis-bridge") {
-      addPluginNavItem(tab.id, setting, corePluginsItems);
+      addPluginNavItem(tab.id, setting, corePluginsItems, ignisNavEls);
     }
   }
 
   hideIgnisNavFromCommunityGroup(setting);
-  hideCorePluginsGroupIfEmpty();
+  hideCorePluginsGroupIfEmpty(ignisNavEls);
 
-  // Watch the community group for changes. When Obsidian adds new ignis
-  // plugin nav items (async after enable), hide them and create our own.
   const communityGroup = findGroupByTitle(
     setting.tabHeadersEl,
     "Community plugins",
@@ -167,32 +159,34 @@ function setupPluginTabs(setting, corePluginsItems) {
     const observer = new MutationObserver(() => {
       for (const tab of setting.pluginTabs) {
         if (isIgnisPlugin(tab.id) && tab.id !== "ignis-bridge") {
-          addPluginNavItem(tab.id, setting, corePluginsItems);
+          addPluginNavItem(tab.id, setting, corePluginsItems, ignisNavEls);
         }
       }
 
-      // Re-evaluate visibility since non-ignis items may have appeared.
       hideIgnisNavFromCommunityGroup(setting);
-      hideCorePluginsGroupIfEmpty();
+      hideCorePluginsGroupIfEmpty(ignisNavEls);
     });
 
     observer.observe(communityGroup, { childList: true, subtree: true });
 
-    const cleanupObserver = new MutationObserver(() => {
-      if (!setting.tabHeadersEl.isConnected) {
-        observer.disconnect();
-        cleanupObserver.disconnect();
-      }
-    });
+    const modalEl = setting.tabHeadersEl.closest(".modal");
 
-    cleanupObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
+    if (modalEl && modalEl.parentElement) {
+      const cleanupObserver = new MutationObserver(() => {
+        if (!setting.tabHeadersEl.isConnected) {
+          observer.disconnect();
+          cleanupObserver.disconnect();
+        }
+      });
+
+      cleanupObserver.observe(modalEl.parentElement, {
+        childList: true,
+      });
+    }
   }
 }
 
-function reconcilePluginTabs(setting) {
+function reconcilePluginTabs(setting, ignisNavEls) {
   const corePluginsGroup = findGroupByTitle(
     setting.tabHeadersEl,
     "Ignis Core Plugins",
@@ -210,31 +204,28 @@ function reconcilePluginTabs(setting) {
     return;
   }
 
-  // Get current set of ignis plugin IDs from pluginTabs.
   const activeIds = new Set(
     setting.pluginTabs
       .filter((t) => isIgnisPlugin(t.id) && t.id !== "ignis-bridge")
       .map((t) => t.id),
   );
 
-  // Remove nav items for plugins that are no longer active.
-  for (const [id] of ownedNavItems) {
+  for (const id of ownedPluginIds) {
     if (!activeIds.has(id)) {
-      removePluginNavItem(id);
+      removePluginNavItem(id, ignisNavEls);
     }
   }
 
-  // Add nav items for newly active plugins.
   for (const id of activeIds) {
-    addPluginNavItem(id, setting, corePluginsItems);
+    addPluginNavItem(id, setting, corePluginsItems, ignisNavEls);
   }
 
   hideIgnisNavFromCommunityGroup(setting);
-  hideCorePluginsGroupIfEmpty();
+  hideCorePluginsGroupIfEmpty(ignisNavEls);
 }
 
-function clearOwnedNavItems() {
-  ownedNavItems.clear();
+function clearOwnedPluginIds() {
+  ownedPluginIds.clear();
 }
 
 module.exports = {
@@ -242,5 +233,5 @@ module.exports = {
   reconcilePluginTabs,
   hideIgnisFromCommunityPlugins,
   restoreCommunityPlugins,
-  clearOwnedNavItems,
+  clearOwnedPluginIds,
 };

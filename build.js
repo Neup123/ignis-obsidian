@@ -69,7 +69,7 @@ Promise.all([
     format: "cjs",
     platform: "browser",
     target: ["chrome90"],
-    external: ["obsidian"],
+    external: ["obsidian", "fs"], //using fs shim
     logLevel: "info",
   }),
 ]).catch(() => process.exit(1));

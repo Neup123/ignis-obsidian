@@ -2,6 +2,7 @@ const path = require("path");
 const obCli = require("./ob-cli");
 const auth = require("./auth");
 const { SyncManager } = require("./sync-manager");
+const { SyncBroadcaster } = require("./broadcaster");
 
 module.exports = {
   id: "headless-sync",
@@ -15,6 +16,7 @@ module.exports = {
   _ctx: null,
   _obStatus: null,
   _syncManager: null,
+  _broadcaster: null,
 
   async register(ctx) {
     this._ctx = ctx;
@@ -33,7 +35,8 @@ module.exports = {
       ctx.log("Auth token loaded");
     }
 
-    this._syncManager = new SyncManager(ctx);
+    this._broadcaster = new SyncBroadcaster(ctx.wss);
+    this._syncManager = new SyncManager(ctx, this._broadcaster);
 
     // Load saved sync states for enabled vaults
     const enabledVaults = ctx.getEnabledVaults();
@@ -56,9 +59,22 @@ module.exports = {
 
     const { mountRoutes } = require("./routes");
     mountRoutes(ctx.router, this);
+
+    // Register WebSocket message handler for log subscriptions
+    if (ctx.wss && ctx.wss.messageHandlers) {
+      ctx.wss.messageHandlers.set("subscribe-logs", (msg) => {
+        if (msg.vaultId && this._broadcaster) {
+          this._broadcaster.subscribeToLogs(msg.vaultId);
+        }
+      });
+    }
   },
 
   async shutdown() {
+    if (this._ctx?.wss?.messageHandlers) {
+      this._ctx.wss.messageHandlers.delete("subscribe-logs");
+    }
+
     if (this._syncManager) {
       await this._syncManager.shutdown();
       this._syncManager = null;

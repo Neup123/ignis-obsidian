@@ -6,7 +6,7 @@ const {
   reconcilePluginTabs,
   hideIgnisFromCommunityPlugins,
   restoreCommunityPlugins,
-  clearOwnedNavItems,
+  clearOwnedPluginIds,
 } = require("./plugin-tabs");
 
 function removeExistingIgnisGroups(tabHeadersEl) {
@@ -24,9 +24,42 @@ function removeExistingIgnisGroups(tabHeadersEl) {
   }
 }
 
+// All ignis-managed nav elements (both Ignis group and Ignis Core Plugins group).
+// Collected here so the openTab patch can manage is-active across all of them.
+const allIgnisNavEls = new Map(); // tab id -> nav element
+
+function patchOpenTab(setting) {
+  if (setting._ignisOpenTabPatched) {
+    return;
+  }
+
+  const original = setting.openTab.bind(setting);
+
+  setting.openTab = function (tab) {
+    // Clear is-active from all ignis nav items.
+    for (const [, el] of allIgnisNavEls) {
+      el.removeClass("is-active");
+    }
+
+    original(tab);
+
+    // If the opened tab is one of ours, highlight it.
+    const navEl = allIgnisNavEls.get(tab.id);
+
+    if (navEl) {
+      navEl.addClass("is-active");
+    }
+  };
+
+  setting._ignisOpenTabPatched = true;
+}
+
 function injectIgnisSettings(setting, app) {
   removeExistingIgnisGroups(setting.tabHeadersEl);
-  clearOwnedNavItems();
+  clearOwnedPluginIds();
+  allIgnisNavEls.clear();
+
+  patchOpenTab(setting);
 
   const ignis = createGroup("Ignis");
 
@@ -44,6 +77,7 @@ function injectIgnisSettings(setting, app) {
   for (const tab of tabs) {
     tab.navEl = createNavEl(tab, setting);
     ignis.items.appendChild(tab.navEl);
+    allIgnisNavEls.set(tab.id, tab.navEl);
   }
 
   setting.tabHeadersEl.appendChild(ignis.group);
@@ -52,7 +86,7 @@ function injectIgnisSettings(setting, app) {
   setting.tabHeadersEl.appendChild(corePlugins.group);
 
   hideIgnisFromCommunityPlugins(setting);
-  setupPluginTabs(setting, corePlugins.items);
+  setupPluginTabs(setting, corePlugins.items, allIgnisNavEls);
 }
 
 function patchSettingsModal(plugin) {
@@ -71,10 +105,13 @@ function unpatchSettingsModal(plugin) {
     plugin.app.setting.onOpen = plugin._originalOnOpen;
   }
 
+  delete plugin.app.setting._ignisOpenTabPatched;
+
   restoreCommunityPlugins(plugin.app.setting);
-  clearOwnedNavItems();
+  clearOwnedPluginIds();
 }
 
-window.__ignisReconcilePluginTabs = reconcilePluginTabs;
+window.__ignisReconcilePluginTabs = (setting) =>
+  reconcilePluginTabs(setting, allIgnisNavEls);
 
 module.exports = { patchSettingsModal, unpatchSettingsModal, reconcilePluginTabs };

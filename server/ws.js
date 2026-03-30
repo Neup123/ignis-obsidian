@@ -6,6 +6,9 @@ const watcher = require("./watcher");
 function setupWebSocket(server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
+  // Plugin-registered message handlers: type -> handler(msg, ws)
+  wss.messageHandlers = new Map();
+
   wss.on("connection", (ws, req) => {
     const params = new url.URL(req.url, "http://localhost").searchParams;
     const vaultId = params.get("vault");
@@ -29,6 +32,18 @@ function setupWebSocket(server) {
     };
 
     watcher.addListener(vaultId, listener);
+
+    // Dispatch incoming messages to registered handlers
+    ws.on("message", (data) => {
+      try {
+        const msg = JSON.parse(data);
+        const handler = wss.messageHandlers.get(msg.type);
+
+        if (handler) {
+          handler(msg, ws);
+        }
+      } catch {}
+    });
 
     ws.on("close", () => {
       console.log(`[ws] Client disconnected from vault: ${vaultId}`);

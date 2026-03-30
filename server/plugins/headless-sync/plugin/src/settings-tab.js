@@ -1,16 +1,52 @@
 const { PluginSettingTab, Setting, Notice } = require("obsidian");
 const api = require("./api");
 const auth = require("./auth");
+const { isCoreSyncEnabled } = require("./core-sync-guard");
+const { renderLogViewer } = require("./log-viewer");
 
 class HeadlessSyncSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this._cancelWait = null;
+    this._logCleanup = null;
+
+    // Persistent container refs
+    this._authEl = null;
+    this._syncEl = null;
+    this._logsEl = null;
+    this._logsRendered = false;
   }
 
   async display() {
+    // Clean up previous log listener before rebuilding
+    if (this._logCleanup) {
+      this._logCleanup();
+      this._logCleanup = null;
+    }
+
     const { containerEl } = this;
     containerEl.empty();
+
+    this._logsRendered = false;
+
+    if (isCoreSyncEnabled()) {
+      const syncWarningSetting = new Setting(containerEl)
+        .setName("Obsidian Sync is active");
+
+      syncWarningSetting.descEl.createEl("span", {
+        text: "Headless Sync cannot run alongside Obsidian's built-in sync to avoid conflicts. Disable Obsidian Sync in Core Plugins to use Headless Sync instead.",
+        cls: "mod-warning",
+      });
+
+      syncWarningSetting
+        .addButton((btn) => {
+          btn.setButtonText("Open Core Plugins").onClick(() => {
+            this.app.setting.openTabById("plugins");
+          });
+      });
+
+      return;
+    }
 
     let serverStatus;
 
@@ -32,16 +68,21 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
       return;
     }
 
-    this.renderAuthSection(containerEl, serverStatus);
-    await this.renderSyncSection(containerEl, serverStatus.authenticated);
+    this._authEl = containerEl.createDiv();
+    this._syncEl = containerEl.createDiv();
+    this._logsEl = containerEl.createDiv();
+
+    this.renderAuthSection(serverStatus);
+    await this.renderSyncSection(serverStatus.authenticated);
   }
 
-  renderAuthSection(containerEl, serverStatus) {
+  renderAuthSection(serverStatus) {
+    this._authEl.empty();
+
     const localToken = auth.getObsidianSyncToken();
 
     if (serverStatus.authenticated) {
-      // State C: connected to server
-      new Setting(containerEl)
+      new Setting(this._authEl)
         .setName("Obsidian Sync account")
         .setDesc(
           `Signed in as ${serverStatus.name || "unknown"} (${serverStatus.email || "unknown"})`,
@@ -53,15 +94,16 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
             try {
               await api.logout();
               new Notice("Disconnected from Headless Sync");
-              this.display();
+              const status = await api.getStatus();
+              this.renderAuthSection(status);
+              await this.renderSyncSection(status.authenticated);
             } catch (e) {
               new Notice(`Failed to disconnect: ${e.message}`);
             }
           });
         });
     } else if (localToken) {
-      // State B: signed into Obsidian, not connected to server
-      new Setting(containerEl)
+      new Setting(this._authEl)
         .setName("Obsidian Sync account detected")
         .setDesc(`${localToken.name} (${localToken.email})`)
         .addButton((btn) => {
@@ -72,44 +114,51 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
               try {
                 await auth.sendTokenToServer(localToken);
                 new Notice("Connected to Headless Sync");
-                this.display();
+                const status = await api.getStatus();
+                this.renderAuthSection(status);
+                await this.renderSyncSection(status.authenticated);
               } catch (e) {
                 new Notice(`Failed to connect: ${e.message}`);
               }
             });
         });
     } else {
-      // State A: not signed into Obsidian
-      new Setting(containerEl)
+      new Setting(this._authEl)
         .setName("Obsidian Sync account")
         .setDesc("Sign in to your Obsidian account to enable sync.")
         .addButton((btn) => {
           btn.setButtonText("Log in to Obsidian Sync").onClick(() => {
-              const triggered = auth.triggerLogin(this.app);
+            const triggered = auth.triggerLogin(this.app);
 
-              if (!triggered) {
-                new Notice("Could not open login dialog. Try logging in from Settings > General.");
-                return;
+            if (!triggered) {
+              new Notice(
+                "Could not open login dialog. Try logging in from Settings > General.",
+              );
+              return;
+            }
+
+            this._cancelWait = auth.waitForLogin(async (token) => {
+              this._cancelWait = null;
+
+              if (token) {
+                new Notice(`Detected login: ${token.name}`);
+                const status = await api.getStatus();
+                this.renderAuthSection(status);
+                await this.renderSyncSection(status.authenticated);
               }
-
-              this._cancelWait = auth.waitForLogin((token) => {
-                this._cancelWait = null;
-
-                if (token) {
-                  new Notice(`Detected login: ${token.name}`);
-                  this.display();
-                }
-              });
             });
+          });
         });
     }
   }
 
-  async renderSyncSection(containerEl, authenticated) {
-    containerEl.createEl("h3", { text: "Vault sync" });
+  async renderSyncSection(authenticated) {
+    this._syncEl.empty();
+
+    this._syncEl.createEl("h3", { text: "Vault sync" });
 
     if (!authenticated) {
-      new Setting(containerEl)
+      new Setting(this._syncEl)
         .setName("Sync not configured")
         .setDesc("Sign in to your Obsidian Sync account to set up sync.")
         .addButton((btn) => {
@@ -127,7 +176,7 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
     try {
       vaultsData = await api.getVaults();
     } catch (e) {
-      containerEl.createEl("p", {
+      this._syncEl.createEl("p", {
         text: `Failed to load sync state: ${e.message}`,
         cls: "mod-warning",
       });
@@ -137,7 +186,7 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
     const vaultState = vaultsData.vaults.find((v) => v.vaultId === vaultId);
 
     if (!vaultState) {
-      new Setting(containerEl)
+      new Setting(this._syncEl)
         .setName("Sync not configured")
         .setDesc("This vault has not been linked to a remote vault yet.")
         .addButton((btn) => {
@@ -157,10 +206,10 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
                 target: document.body,
                 props: {
                   vaultId,
-                  onSuccess: () => {
+                  onSuccess: async () => {
                     cleanup();
                     modal.$destroy();
-                    this.display();
+                    await this.renderSyncSection(true);
                   },
                 },
               });
@@ -176,9 +225,11 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
     }
 
     // Show current sync config
-    new Setting(containerEl)
+    new Setting(this._syncEl)
       .setName("Remote vault")
-      .setDesc(vaultState.remoteVaultName || vaultState.remoteVault || "unknown")
+      .setDesc(
+        vaultState.remoteVaultName || vaultState.remoteVault || "unknown",
+      )
       .addButton((btn) => {
         btn.setButtonText("Unlink");
         btn.buttonEl.addClass("mod-destructive");
@@ -186,18 +237,44 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
           try {
             await api.unlinkVault(vaultId);
             new Notice("Vault unlinked");
-            this.display();
+            await this.renderSyncSection(true);
           } catch (e) {
             new Notice(`Failed to unlink: ${e.message}`);
           }
         });
       });
 
-    new Setting(containerEl)
+    new Setting(this._syncEl)
       .setName("Sync mode")
       .setDesc(vaultState.config?.mode || "bidirectional");
 
     // Sync controls
+    const controlsEl = this._syncEl.createDiv();
+    this.renderSyncControls(controlsEl, vaultId, vaultState);
+
+    // Log viewer - only render once, persists across sync section rebuilds
+    if (!this._logsRendered) {
+      await this.renderLogs(this._logsEl, vaultId);
+      this._logsRendered = true;
+    }
+  }
+
+  async renderSyncControls(containerEl, vaultId, vaultState) {
+    containerEl.empty();
+
+    if (!vaultState) {
+      try {
+        const data = await api.getVaults();
+        vaultState = (data.vaults || []).find((v) => v.vaultId === vaultId);
+      } catch {
+        return;
+      }
+    }
+
+    if (!vaultState) {
+      return;
+    }
+
     const statusText =
       vaultState.status === "running"
         ? "Sync is running"
@@ -216,91 +293,34 @@ class HeadlessSyncSettingTab extends PluginSettingTab {
             try {
               await api.stopSync(vaultId);
               new Notice("Sync stopped");
-              this.display();
+              this.renderSyncControls(containerEl, vaultId);
             } catch (e) {
               new Notice(`Failed to stop: ${e.message}`);
             }
           });
         } else {
-          btn.setButtonText("Start sync").setCta().onClick(async () => {
-            try {
-              await api.startSync(vaultId);
-              new Notice("Sync started");
-              this.display();
-            } catch (e) {
-              new Notice(`Failed to start: ${e.message}`);
-            }
-          });
+          btn
+            .setButtonText("Start sync")
+            .setCta()
+            .onClick(async () => {
+              try {
+                await api.startSync(vaultId);
+                new Notice("Sync started");
+                this.renderSyncControls(containerEl, vaultId);
+              } catch (e) {
+                new Notice(`Failed to start: ${e.message}`);
+              }
+            });
         }
       });
-
-    // Log viewer (collapsible)
-    await this.renderLogs(containerEl, vaultId);
   }
 
   async renderLogs(containerEl, vaultId) {
-    const details = containerEl.createEl("details", {
-      cls: "ignis-log-details",
-    });
-
-    details.createEl("summary", { text: "Sync logs" });
-
-    const logBox = details.createEl("pre", { cls: "ignis-log-terminal" });
-    const codeEl = logBox.createEl("code");
-
-    let logsData;
-
-    try {
-      logsData = await api.getLogs(vaultId, 50);
-    } catch (e) {
-      codeEl.textContent = `Failed to load logs: ${e.message}`;
-      return;
-    }
-
-    if (logsData.logs.length === 0) {
-      codeEl.textContent = "No log entries yet.";
-    } else {
-      const lines = logsData.logs.map((entry) => {
-        const time = new Date(entry.timestamp).toLocaleTimeString();
-        return `[${time}] ${entry.line}`;
-      });
-
-      codeEl.textContent = lines.join("\n");
-    }
-
-    logBox.scrollTop = logBox.scrollHeight;
-
-    // Live updates via WebSocket
-    const wsListener = this.plugin.wsListener;
-
-    if (!wsListener) {
-      return;
-    }
-
-    const onLog = (payload) => {
-      if (payload.vaultId !== vaultId) {
-        return;
-      }
-
-      const time = new Date().toLocaleTimeString();
-      const line = `[${time}] ${payload.line}`;
-
-      if (codeEl.textContent === "No log entries yet.") {
-        codeEl.textContent = line;
-      } else {
-        codeEl.textContent += "\n" + line;
-      }
-
-      const isNearBottom =
-        logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < 50;
-
-      if (isNearBottom) {
-        logBox.scrollTop = logBox.scrollHeight;
-      }
-    };
-
-    wsListener.on("sync-log", onLog);
-    this._logCleanup = () => wsListener.off("sync-log", onLog);
+    this._logCleanup = await renderLogViewer(
+      containerEl,
+      vaultId,
+      this.plugin.wsListener,
+    );
   }
 
   hide() {

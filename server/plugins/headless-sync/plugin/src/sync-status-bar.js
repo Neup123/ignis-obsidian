@@ -62,6 +62,8 @@ function initSyncStatusBar(plugin, wsListener) {
 
     popoverOpen = true;
 
+    wsListener.subscribeLogs(vaultId);
+
     outsideClickHandler = (e) => {
       if (!item.contains(e.target)) {
         hidePopover();
@@ -84,6 +86,7 @@ function initSyncStatusBar(plugin, wsListener) {
       outsideClickHandler = null;
     }
 
+    wsListener.unsubscribeLogs();
     popoverOpen = false;
   }
 
@@ -114,6 +117,13 @@ function initSyncStatusBar(plugin, wsListener) {
   function extractFileActivity(line) {
     // Downloading/Downloaded path
     let match = line.match(/^(?:Downloading|Downloaded)\s+(.+)$/);
+
+    if (match) {
+      return { prefix: "Syncing", path: match[1].trim() };
+    }
+
+    // Uploading file / Upload complete path
+    match = line.match(/^(?:Uploading file|Upload complete|New file)\s+(.+)$/);
 
     if (match) {
       return { prefix: "Syncing", path: match[1].trim() };
@@ -238,8 +248,7 @@ function initSyncStatusBar(plugin, wsListener) {
   let wasDisconnected = false;
 
   const wsCheckInterval = setInterval(() => {
-    const ws = window.__ignisWs;
-    const disconnected = !ws || ws.readyState !== WebSocket.OPEN;
+    const disconnected = !wsListener.isConnected();
 
     if (disconnected && currentStatus === "running") {
       updateState("error", "Server connection lost");
