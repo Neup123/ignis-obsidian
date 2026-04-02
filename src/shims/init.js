@@ -3,6 +3,7 @@ import { installRequestUrlShim } from "./request-url.js";
 import { vaultService } from "../services/vault-service.js";
 import { showPluginInstallDialog } from "../ui/bootstrap.js";
 import { registerReadTransform } from "./fs/read-transforms.js";
+import { resolveWorkspaceName, initWorkspacePatch } from "./workspace.js";
 
 function resolveVaultId() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -171,9 +172,11 @@ function initCoreSyncGuard() {
 export function initialize() {
   resolveVaultId();
   initVaultConfig();
+  resolveWorkspaceName();
   initVaultList();
   initMetadataCache();
   initCoreSyncGuard();
   installRequestUrlShim();
+  initWorkspacePatch();
   initPluginPrompt();
 }

@@ -1,4 +1,10 @@
+import {
+  rewriteWorkspacePath,
+  rewriteWorkspacesContent,
+} from "../workspace.js";
+
 const API_BASE = "/api/fs";
+const WORKSPACES_PATH = ".obsidian/workspaces.json";
 
 function normPath(p) {
   return (p || "").replace(/^\/+/, "");
@@ -17,22 +23,6 @@ function uint8ToBase64(bytes) {
 
 function vaultId() {
   return window.__currentVaultId || "";
-}
-
-const WORKSPACE_PATH = ".obsidian/workspace.json";
-
-function rewriteWorkspacePath(normalizedPath) {
-  const name = window.__workspaceName;
-
-  if (!name) {
-    return normalizedPath;
-  }
-
-  if (normalizedPath === WORKSPACE_PATH) {
-    return `.obsidian/workspace.${name}.json`;
-  }
-
-  return normalizedPath;
 }
 
 async function request(method, endpoint, params = {}) {
@@ -156,10 +146,17 @@ export const transport = {
   },
 
   async writeFile(path, content, encoding) {
-    const isText = typeof content === "string";
+    const norm = normPath(path);
+    let data = content;
+
+    if (norm === WORKSPACES_PATH && typeof data === "string") {
+      data = rewriteWorkspacesContent(data);
+    }
+
+    const isText = typeof data === "string";
     return requestJson("POST", "/writeFile", {
-      path: rewriteWorkspacePath(normPath(path)),
-      content: isText ? content : uint8ToBase64(content),
+      path: rewriteWorkspacePath(norm),
+      content: isText ? data : uint8ToBase64(data),
       encoding: encoding || (isText ? "utf-8" : "binary"),
       base64: !isText,
     });
@@ -261,10 +258,17 @@ export const transport = {
   },
 
   writeFileSync(path, content, encoding) {
-    const isText = typeof content === "string";
+    const norm = normPath(path);
+    let data = content;
+
+    if (norm === WORKSPACES_PATH && typeof data === "string") {
+      data = rewriteWorkspacesContent(data);
+    }
+
+    const isText = typeof data === "string";
     requestSync("POST", "/writeFile", {
-      path: rewriteWorkspacePath(normPath(path)),
-      content: isText ? content : uint8ToBase64(content),
+      path: rewriteWorkspacePath(norm),
+      content: isText ? data : uint8ToBase64(data),
       encoding: encoding || (isText ? "utf-8" : "binary"),
       base64: !isText,
     });
