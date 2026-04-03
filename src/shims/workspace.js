@@ -178,6 +178,18 @@ export function initWorkspacePatch() {
       return data;
     });
 
+    // Relay watcher events for workspaces.json to the plugin's config change handler,
+    // so creating/deleting workspaces in one tab updates the menu in other tabs.
+    fsShim.watch(".obsidian", (eventType, filename) => {
+      if (filename === "workspaces.json") {
+        plugin.loadData().then((data) => {
+          if (data) {
+            instance.workspaces = data.workspaces || {};
+          }
+        });
+      }
+    });
+
     console.log("[ignis] Workspaces plugin patched, workspace:", window.__workspaceName || "(none)");
   });
 

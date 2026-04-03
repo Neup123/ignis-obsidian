@@ -3,6 +3,7 @@ const { showFilePicker, addFileMenuItems, addFolderMenuItems } = require("./file
 const { patchSettingsModal, unpatchSettingsModal } = require("./settings/inject");
 const pluginRegistry = require("./plugin-registry");
 const { initStatusBar } = require("./status-bar");
+const { WorkspacePickerModal } = require("./workspace-picker");
 
 window.__obsidianAPI = require("obsidian");
 
@@ -16,6 +17,14 @@ class IgnisBridgePlugin extends Plugin {
 
     this.addRibbonIcon("upload", "Upload file", () => {
       showFilePicker(this.app);
+    });
+
+    this.addCommand({
+      id: "open-workspace-in-new-tab",
+      name: "Open workspace in new tab",
+      callback: () => {
+        new WorkspacePickerModal(this.app).open();
+      },
     });
 
     this.registerEvent(
