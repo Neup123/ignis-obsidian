@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.5] - Orm (2026-04-05)
+
+### Added
+
+- per tab workspaces
+- self-host auth examples
+- better documentation
+
 ## [0.7.4] - Orm (2026-03-30)
 
 ### Added
