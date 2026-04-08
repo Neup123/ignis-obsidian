@@ -6,7 +6,7 @@
   <h3 align="center">Ignis</h3>
 
   <p align="center">
-    Run Obsidian in the browser. No VNC required.
+    Run Obsidian in the browser. No remote desktop required.
   </p>
 </section>
 
@@ -52,10 +52,12 @@ Ignis has **no built-in authentication**. The server is completely open by defau
 
 If you are exposing Ignis to the internet, **you should really** put an authentication layer in front of it. Options include:
 
-- A reverse proxy with basic auth (nginx, Caddy, Traefik)
+- A reverse proxy with Basic Auth (nginx, Caddy, Traefik)
 - An SSO proxy like Authelia, Authentik, or OAuth2 Proxy
 - A VPN (Tailscale, WireGuard)
 - Cloudflare Application Tunnel
+
+Example for Basic Auth, and Authelia can be found [here](examples).
 
 > [!CAUTION]
 > Do not run Ignis on a public network without auth. Anyone with the url can read and write your vault files.

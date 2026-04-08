@@ -24,7 +24,7 @@ The shim layer makes Obsidian think it's running in Electron. The bridge plugin 
 
 ### Loading
 
-The Obsidian index file is patched to run the shim loader first. It replaces the module system and makes a blocking HTTP request to fetch the vault's directory tree into memory. The request has to be blocking because Obsidian makes synchronous filesystem calls during page load, before the event loop is running, so the cache has to already be populated.
+Obsidian's index file is intercepted during serving and the shim loader is loaded ahead of Obsidian's own scripts. It replaces the module system and makes a blocking HTTP request to fetch the vault's directory tree into memory. The request has to be blocking because Obsidian makes synchronous filesystem calls during page load, before the event loop is running, so the cache has to already be populated.
 
 ### Modules
 
@@ -49,7 +49,7 @@ Sync calls use synchronous XHR to ensure blocking behavior. Async calls use fetc
 
 ### IPC
 
-IPC is faked with a synchronous dispatcher that maps channel names to handlers.
+IPC is implemented as a synchronous dispatcher that maps channel names to handlers.
 
 ### Obsidian Plugin Compatibility
 
