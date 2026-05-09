@@ -9,6 +9,7 @@ const watcher = require("./watcher");
 const { updateBridgePluginInAllVaults } = require("./bridge-plugin");
 const { initPlugins, shutdownPlugins } = require("./plugin-system/manager");
 const pluginRoutes = require("./routes/plugins");
+const { flushAll } = require("./write-coalescer");
 
 const ANSI_RED = "\x1b[31m";
 const ANSI_YELLOW = "\x1b[33m";
@@ -159,6 +160,7 @@ const wss = setupWebSocket(server);
 async function gracefulShutdown(signal) {
   console.log(`\n[ignis] Received ${signal}, shutting down gracefully...`);
 
+  await flushAll();
   await shutdownPlugins();
 
   server.close(() => {

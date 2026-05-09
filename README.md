@@ -116,6 +116,7 @@ volumes:
 | `OBSIDIAN_VERSION` | Obsidian version to download | `1.12.4` |
 | `PUID` | User ID for file ownership | `1000` |
 | `PGID` | Group ID for file ownership | `1000` |
+| `WRITE_COALESCE_MS` | Debounce window (ms) for rapid writes. Useful for slow filesystems (rclone, NFS, SMB). Set to `0` to disable. | `5000` |
 
 ## Contributing
 

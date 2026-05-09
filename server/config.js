@@ -75,6 +75,8 @@ module.exports = {
     vaults = discoverVaults();
     return vaults;
   },
+  writeCoalesceMs: parseInt(process.env.WRITE_COALESCE_MS) || 5000,
+
   obsidianAssetsPath:
     process.env.OBSIDIAN_ASSETS_PATH ||
     path.join(__dirname, "..", "investigation", "obsidian_1.12.4_unpacked"),

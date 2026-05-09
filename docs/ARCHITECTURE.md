@@ -24,7 +24,9 @@ The shim layer makes Obsidian think it's running in Electron. The bridge plugin 
 
 ### Loading
 
-Obsidian's index file is intercepted during serving and the shim loader is loaded ahead of Obsidian's own scripts. It replaces the module system and makes a blocking HTTP request to fetch the vault's directory tree into memory. The request has to be blocking because Obsidian makes synchronous filesystem calls during page load, before the event loop is running, so the cache has to already be populated.
+The server serves its own `index.html` (in `server/assets/`) rather than Obsidian's. At startup it reads Obsidian's `index.html` once to discover which scripts Obsidian expects, then embeds that list in our HTML as a JSON array. The client-side HTML loads the shim loader and UI bundle first (non-deferred), then a small inline script dynamically injects Obsidian's scripts in order. Obsidian's files are never modified, read into responses, or transformed in transit.
+
+The shim loader replaces the module system and makes a blocking HTTP request to fetch the vault's directory tree into memory. The request has to be blocking because Obsidian makes synchronous filesystem calls during page load, before the event loop is running, so the cache has to already be populated.
 
 ### Modules
 
@@ -43,7 +45,9 @@ Unknown modules return an empty proxy and log a warning. The shim exposes two co
 
 ### Filesystem
 
-On page load the server returns the full directory tree, which gets cached in memory with paths, sizes, and modification times. Sync filesystem calls hit the cache rather than the network. File contents are cached in an LRU cache after first read and written through immediately on writes.
+On page load the server returns the full directory tree, which gets cached in memory with paths, sizes, and modification times. Sync filesystem calls hit the cache rather than the network. File contents are cached in an LRU cache after first read.
+
+Writes go through a server-side write coalescer (`server/write-coalescer.js`) designed for slow filesystems like rclone FUSE mounts. The first write to a file goes to disk immediately. Subsequent writes within a configurable window (default 5 seconds, `WRITE_COALESCE_MS`) are buffered in memory; the timer resets on each write. After the window elapses with no new writes, the buffered data is flushed to disk. Reads for pending paths serve the buffered content so clients never see stale data. All pending writes are flushed on graceful shutdown.
 
 Sync calls use synchronous XHR to ensure blocking behavior. Async calls use fetch. Everything goes through a transport layer that handles vault ID injection, base64 encoding for binary files, and mapping HTTP error codes back to Node errno values.
 

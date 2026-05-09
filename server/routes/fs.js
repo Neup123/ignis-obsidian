@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const archiver = require("archiver");
 const config = require("../config");
+const { writeCoalesced, getPending } = require("../write-coalescer");
 
 const router = express.Router();
 
@@ -115,6 +116,25 @@ router.get("/stat", async (req, res) => {
   }
 
   try {
+    // If a coalesced write is pending, report its size instead of stale disk data
+    const buffered = getPending(resolved);
+
+    if (buffered) {
+      const diskStat = await fs.promises.stat(resolved).catch(() => null);
+      const size = Buffer.isBuffer(buffered.data)
+        ? buffered.data.length
+        : Buffer.byteLength(buffered.data, buffered.encoding || "utf-8");
+
+      res.json({
+        type: "file",
+        size,
+        mtime: Date.now(),
+        ctime: diskStat ? diskStat.ctimeMs : Date.now(),
+      });
+
+      return;
+    }
+
     const stat = await fs.promises.stat(resolved);
 
     res.json({
@@ -183,6 +203,21 @@ router.get("/readFile", async (req, res) => {
       });
     }
 
+    // Serve buffered content if a coalesced write is pending for this path
+    const buffered = getPending(resolved);
+
+    if (buffered) {
+      const encoding = req.query.encoding;
+
+      if (encoding === "utf8" || encoding === "utf-8") {
+        res.type("text/plain").send(buffered.data);
+      } else {
+        res.type("application/octet-stream").send(buffered.data);
+      }
+
+      return;
+    }
+
     const encoding = req.query.encoding;
 
     if (encoding === "utf8" || encoding === "utf-8") {
@@ -221,15 +256,9 @@ router.post("/writeFile", async (req, res) => {
       data = Buffer.from(req.body.content, "base64");
     }
 
-    await fs.promises.writeFile(
-      resolved,
-      data,
-      encoding === "binary" ? undefined : encoding,
-    );
+    const result = await writeCoalesced(resolved, data, encoding);
 
-    const stat = await fs.promises.stat(resolved);
-
-    res.json({ ok: true, mtime: stat.mtimeMs, size: stat.size });
+    res.json({ ok: true, mtime: result.mtime, size: result.size });
   } catch (e) {
     res.status(500).json({ error: e.message, code: e.code });
   }
