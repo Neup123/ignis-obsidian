@@ -150,4 +150,13 @@ async function flushAll() {
   await Promise.race([Promise.allSettled(writes), timeout]);
 }
 
-module.exports = { writeCoalesced, getPending, flushAll };
+// Test-only: clear all internal state. Not exported for production use.
+function _reset() {
+  for (const entry of pending.values()) {
+    clearTimeout(entry.timer);
+  }
+  pending.clear();
+  lastWriteTime.clear();
+}
+
+module.exports = { writeCoalesced, getPending, flushAll, _reset };
