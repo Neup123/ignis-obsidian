@@ -17,7 +17,7 @@ describe("ContentCache size accounting", () => {
     expect(cache.currentBytes).toBe(0);
   });
 
-  it("replacing an entry reflects the new size, not old + new", () => {
+  it("replacing an entry reflects the new size", () => {
     const cache = new ContentCache(1024);
     cache.set("a.md", "short");
     cache.set("a.md", "a much longer string");

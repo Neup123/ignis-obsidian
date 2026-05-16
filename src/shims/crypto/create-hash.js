@@ -1,74 +1,88 @@
-export function createHash(algorithm) {
-  const alg = algorithm.toUpperCase().replace("-", "");
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
+import { sha1, md5 } from "@noble/hashes/legacy.js";
 
-  const subtleAlg =
-    alg === "SHA256"
-      ? "SHA-256"
-      : alg === "SHA1"
-        ? "SHA-1"
-        : alg === "SHA512"
-          ? "SHA-512"
-          : alg;
+const HASHERS = {
+  SHA1: sha1,
+  SHA256: sha256,
+  SHA512: sha512,
+  MD5: md5,
+};
+
+const SUBTLE_ALG = {
+  SHA1: "SHA-1",
+  SHA256: "SHA-256",
+  SHA512: "SHA-512",
+};
+
+function normalizeAlgorithm(algorithm) {
+  return algorithm.toUpperCase().replace(/-/g, "");
+}
+
+function encode(bytes, encoding) {
+  if (!encoding) {
+    return bytes;
+  }
+
+  if (encoding === "hex") {
+    let hex = "";
+
+    for (let i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, "0");
+    }
+
+    return hex;
+  }
+
+  if (encoding === "base64") {
+    let binary = "";
+
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+
+    return btoa(binary);
+  }
+
+  throw new Error(`Unsupported digest encoding: ${encoding}`);
+}
+
+export function createHash(algorithm) {
+  const alg = normalizeAlgorithm(algorithm);
+  const hasher = HASHERS[alg];
+
+  if (!hasher) {
+    throw new Error(`Unsupported hash algorithm: ${algorithm}`);
+  }
 
   let inputData = new Uint8Array(0);
 
   return {
     update(data) {
-      if (typeof data === "string") {
-        data = new TextEncoder().encode(data);
-      }
-
-      const merged = new Uint8Array(inputData.length + data.length);
+      const bytes =
+        typeof data === "string" ? new TextEncoder().encode(data) : data;
+      const merged = new Uint8Array(inputData.length + bytes.length);
 
       merged.set(inputData);
-      merged.set(data, inputData.length);
-
+      merged.set(bytes, inputData.length);
       inputData = merged;
 
       return this;
     },
 
     digest(encoding) {
-      console.warn("[shim:crypto] createHash.digest - using placeholder");
-
-      const hash = simpleHash(inputData);
-
-      if (encoding === "hex") {
-        return hash;
-      }
-
-      if (encoding === "base64") {
-        return btoa(hash);
-      }
-
-      return hash;
+      return encode(hasher(inputData), encoding);
     },
 
     async digestAsync(encoding) {
-      const hashBuffer = await crypto.subtle.digest(subtleAlg, inputData);
-      const hashArray = new Uint8Array(hashBuffer);
+      const subtleAlg = SUBTLE_ALG[alg];
 
-      if (encoding === "hex") {
-        return Array.from(hashArray)
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
+      if (!subtleAlg) {
+        // SubtleCrypto doesn't cover MD5; fall back to the sync hasher.
+        return encode(hasher(inputData), encoding);
       }
 
-      if (encoding === "base64") {
-        return btoa(String.fromCharCode(...hashArray));
-      }
-
-      return hashArray;
+      const buf = await crypto.subtle.digest(subtleAlg, inputData);
+      return encode(new Uint8Array(buf), encoding);
     },
   };
-}
-
-function simpleHash(data) {
-  let hash = 0;
-
-  for (let i = 0; i < data.length; i++) {
-    hash = ((hash << 5) - hash + data[i]) | 0;
-  }
-
-  return Math.abs(hash).toString(16).padStart(8, "0");
 }
