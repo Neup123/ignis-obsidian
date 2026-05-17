@@ -54,10 +54,15 @@
 .ignis-update-indicator {
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
+  text-decoration: none;
 }
 
 .ignis-update-indicator.ignis-update-available {
   color: var(--text-accent);
+}
+
+.ignis-update-indicator.ignis-update-available:hover {
+  text-decoration: underline;
 }
 
 .ignis-github-link {

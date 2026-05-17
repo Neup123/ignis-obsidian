@@ -13,6 +13,11 @@ function getVersion(app) {
   }
 }
 
+// SemVer build metadata (`+xyz`) is informational and ignored for precedence.
+function stripBuildMetadata(version) {
+  return (version || "").split("+")[0];
+}
+
 async function checkForUpdate(currentVersion) {
   try {
     const res = await fetch(GITHUB_API_LATEST);
@@ -22,10 +27,11 @@ async function checkForUpdate(currentVersion) {
     }
 
     const data = await res.json();
-    const latest = data.tag_name?.replace(/^v/, "");
+    const latest = stripBuildMetadata(data.tag_name?.replace(/^v/, ""));
+    const current = stripBuildMetadata(currentVersion);
 
-    if (latest && latest !== currentVersion) {
-      return latest;
+    if (latest && latest !== current) {
+      return { version: latest, url: data.html_url };
     }
 
     return null;
@@ -59,9 +65,10 @@ function display(containerEl, app) {
     cls: "ignis-header-version",
   });
 
-  const updateIndicator = versionCol.createEl("span", {
+  const updateIndicator = versionCol.createEl("a", {
     text: "Checking...",
     cls: "ignis-update-indicator",
+    attr: { target: "_blank", rel: "noopener noreferrer" },
   });
 
   const githubLink = right.createEl("a", {
@@ -75,10 +82,11 @@ function display(containerEl, app) {
     attr: { src: "/assets/github.svg", alt: "GitHub" },
   });
 
-  checkForUpdate(version).then((latestVersion) => {
-    if (latestVersion) {
-      updateIndicator.textContent = `v${latestVersion} available`;
+  checkForUpdate(version).then((latest) => {
+    if (latest) {
+      updateIndicator.textContent = `v${latest.version} available`;
       updateIndicator.addClass("ignis-update-available");
+      updateIndicator.href = latest.url;
     } else {
       updateIndicator.textContent = "Up to date";
     }
