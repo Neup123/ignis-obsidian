@@ -1,10 +1,10 @@
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
+const { getObHome } = require("./ob-cli");
 
-function getObAuthFile() {
+function getObAuthFile(dataDir) {
   return path.join(
-    os.homedir(),
+    getObHome(dataDir),
     ".config",
     "obsidian-headless",
     "auth_token",
@@ -23,14 +23,14 @@ function loadToken(dataDir) {
       const data = JSON.parse(fs.readFileSync(internalFile, "utf-8"));
 
       if (data && data.token) {
-        syncToObCli(data.token);
+        syncToObCli(dataDir, data.token);
         return data;
       }
     }
   } catch {}
 
   // Fall back to ob CLI's own auth file
-  const obAuthFile = getObAuthFile();
+  const obAuthFile = getObAuthFile(dataDir);
 
   try {
     if (fs.existsSync(obAuthFile)) {
@@ -49,7 +49,7 @@ function loadToken(dataDir) {
 
 function saveToken(dataDir, tokenData) {
   saveInternal(dataDir, tokenData);
-  syncToObCli(tokenData.token);
+  syncToObCli(dataDir, tokenData.token);
 }
 
 function clearToken(dataDir) {
@@ -61,7 +61,7 @@ function clearToken(dataDir) {
     }
   } catch {}
 
-  const obAuthFile = getObAuthFile();
+  const obAuthFile = getObAuthFile(dataDir);
 
   try {
     if (fs.existsSync(obAuthFile)) {
@@ -94,8 +94,8 @@ function saveInternal(dataDir, tokenData) {
   fs.writeFileSync(internalFile, JSON.stringify(tokenData, null, 2), "utf-8");
 }
 
-function syncToObCli(token) {
-  const obAuthFile = getObAuthFile();
+function syncToObCli(dataDir, token) {
+  const obAuthFile = getObAuthFile(dataDir);
 
   try {
     const dir = path.dirname(obAuthFile);
@@ -124,4 +124,10 @@ function getTokenInfo(dataDir) {
   return null;
 }
 
-module.exports = { loadToken, saveToken, clearToken, isAuthenticated, getTokenInfo };
+module.exports = {
+  loadToken,
+  saveToken,
+  clearToken,
+  isAuthenticated,
+  getTokenInfo,
+};

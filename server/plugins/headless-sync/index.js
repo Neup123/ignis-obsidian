@@ -29,6 +29,10 @@ module.exports = {
       ctx.log("ob CLI not found. Install obsidian-headless to enable sync.");
     }
 
+    // Redirect ob's HOME under the plugin's data dir so its config (per-vault sync setups, etc.)
+    // survives container recreates. Must happen before auth.loadToken since loadToken pushes the token into ob's config location via syncToObCli.
+    obCli.configure({ dataDir: ctx.dataDir });
+
     const token = auth.loadToken(ctx.dataDir);
 
     if (token) {

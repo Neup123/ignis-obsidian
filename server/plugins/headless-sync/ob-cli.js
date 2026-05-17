@@ -1,7 +1,27 @@
 const { spawn, execSync } = require("child_process");
+const fs = require("fs");
 const os = require("os");
+const path = require("path");
 
 const isWindows = process.platform === "win32";
+
+// When set via configure(), HOME for the spawned ob points under the plugin's data dir so
+// ob's config dir (~/.config/obsidian-headless/) survives container recreates.
+let configuredDataDir = null;
+
+function getObHome(dataDir) {
+  return path.join(dataDir, "ob-home");
+}
+
+function configure(opts) {
+  configuredDataDir = opts && opts.dataDir ? opts.dataDir : null;
+
+  if (configuredDataDir) {
+    try {
+      fs.mkdirSync(getObHome(configuredDataDir), { recursive: true });
+    } catch {}
+  }
+}
 
 function checkInstalled() {
   try {
@@ -19,8 +39,12 @@ function checkInstalled() {
 }
 
 function spawnOb(args, opts = {}) {
+  const home = configuredDataDir
+    ? getObHome(configuredDataDir)
+    : os.homedir();
+
   return spawn("ob", args, {
-    env: { ...process.env, HOME: os.homedir() },
+    env: { ...process.env, HOME: home },
     shell: isWindows,
     windowsHide: true,
     ...opts,
@@ -58,4 +82,10 @@ function runCommand(args, opts = {}) {
   });
 }
 
-module.exports = { checkInstalled, spawnOb, runCommand };
+module.exports = {
+  checkInstalled,
+  spawnOb,
+  runCommand,
+  configure,
+  getObHome,
+};
