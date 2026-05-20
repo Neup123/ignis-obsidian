@@ -156,6 +156,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(express.static(path.join(__dirname, "..", "packages", "ui", "dist")));
 app.use(express.static(path.join(__dirname, "..", "dist")));
 
 app.use(express.static(config.obsidianAssetsPath));
