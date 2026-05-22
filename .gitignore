@@ -2,6 +2,8 @@ node_modules/
 dist/
 investigation/
 vaults/
-plugin/main.js
-server/plugins/*/plugin/main.js
+packages/*/dist/
+packages/bridge-plugin/main.js
+apps/ignis-server/server/plugins/*/plugin/main.js
 demo-vaults/
+data/
