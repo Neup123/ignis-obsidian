@@ -30,12 +30,7 @@ Plugin compatibility depends on what APIs a plugin uses; most plugins built on O
 
 ## Variants
 
-Ignis ships in two forms with the same in-browser experience:
-
-- **Self-hosted server** -- [`apps/ignis-server/`](apps/ignis-server/). Docker container running Express. Stable, in daily use. See its README for setup, env vars, and reverse-proxy examples.
-- **Desktop plugin** -- `apps/ignis-local/`. Planned.
-
-The rest of this README describes the shared experience.
+Ignis ships currently ships as a self-hosted server but I have plans for a desktop plugin. The server variant code and Readme with details and setup instructions lives here: [`apps/ignis-server/`](apps/ignis-server/)
 
 ## What works
 
