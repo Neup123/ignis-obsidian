@@ -11,7 +11,7 @@ module.exports = {
   version: "0.3.0",
   //TODO: add server plugin manifest
 
-  obsidianPlugin: path.join(__dirname, "plugin"),
+  obsidianPlugin: path.join(__dirname, "obsidian"),
 
   _ctx: null,
   _obStatus: null,
