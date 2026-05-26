@@ -4,13 +4,8 @@ const GITHUB_URL = "https://github.com/Nystik-gh/ignis";
 const GITHUB_API_LATEST =
   "https://api.github.com/repos/Nystik-gh/ignis/releases/latest";
 
-function getVersion(app) {
-  try {
-    const manifest = app.plugins.getPlugin("ignis-bridge")?.manifest;
-    return manifest?.version || "unknown";
-  } catch {
-    return "unknown";
-  }
+function getVersion() {
+  return window.__ignis?.version || "unknown";
 }
 
 // SemVer build metadata (`+xyz`) is informational and ignored for precedence.
@@ -41,7 +36,7 @@ async function checkForUpdate(currentVersion) {
 }
 
 function display(containerEl, app) {
-  const version = getVersion(app);
+  const version = getVersion();
 
   const header = containerEl.createDiv("ignis-header");
 

@@ -3,6 +3,6 @@ dist/
 investigation/
 vaults/
 packages/*/dist/
-packages/bridge/main.js
+apps/ignis-server/server/build-info.json
 demo-vaults/
 data/

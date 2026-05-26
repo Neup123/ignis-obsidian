@@ -12,6 +12,27 @@ const headlessSyncDir = path.join(
   "obsidian",
 );
 
+// Compute version info once and share across per-package builds.
+const { version: semver } = require("./package.json");
+const build = process.env.IGNIS_BUILD || Date.now().toString(36).slice(-7);
+const version = `${semver}+${build}`;
+
+const buildInfoPath = path.join(
+  __dirname,
+  "apps",
+  "ignis-server",
+  "server",
+  "build-info.json",
+);
+
+fs.writeFileSync(
+  buildInfoPath,
+  JSON.stringify({ semver, build, version }, null, 2),
+);
+
+// Used by packages.
+process.env.IGNIS_BUILD_RESOLVED = build;
+
 Promise.all([
   // Build shim-loader.js (delegated to packages/shim)
   require("./packages/shim/build.js"),

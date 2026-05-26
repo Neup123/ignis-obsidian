@@ -53,6 +53,7 @@ COPY packages/server-core/src/ ./packages/server-core/src/
 # Built artifacts from the build stage.
 COPY --from=build /app/packages/shim/dist/shim-loader.js ./packages/shim/dist/shim-loader.js
 COPY --from=build /app/packages/ui/dist/ignis-ui.js ./packages/ui/dist/ignis-ui.js
+COPY --from=build /app/apps/ignis-server/server/build-info.json ./apps/ignis-server/server/build-info.json
 COPY --from=build /app/apps/ignis-server/server/plugins/headless-sync/obsidian/dist/ ./apps/ignis-server/server/plugins/headless-sync/obsidian/dist/
 
 RUN chmod +x /app/apps/ignis-server/scripts/entrypoint.sh

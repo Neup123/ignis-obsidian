@@ -11,4 +11,4 @@ demo-vaults
 data
 tmp
 **/dist
-packages/bridge/main.js
+apps/ignis-server/server/build-info.json

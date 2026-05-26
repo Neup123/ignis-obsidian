@@ -103,7 +103,6 @@ module.exports = {
     const assetsPath =
       process.env.OBSIDIAN_ASSETS_PATH ||
       path.join(__dirname, "..", "investigation", "obsidian_1.12.7_unpacked");
-    q;
     try {
       const pkg = JSON.parse(
         fs.readFileSync(path.join(assetsPath, "package.json"), "utf-8"),
