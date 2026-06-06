@@ -101,10 +101,6 @@ const STATUS_DOT_CLASSES = {
   closed: "ignis-status-disconnected",
 };
 
-// Obsidian's grouped-settings container. The .setting-group > .setting-items
-// structure renders its child settings inside one shared box, with an optional
-// heading as a sibling above the box. The shipped stylesheet supplies the
-// styling from theme variables, so the rows need no custom CSS.
 function createSettingGroup(containerEl, heading) {
   const group = containerEl.createDiv("setting-group");
 
@@ -251,19 +247,24 @@ async function saveSetting(partial) {
 }
 
 function numberField(containerEl, { name, desc, value, key, toStored }) {
+  let committed = value;
+
   new Setting(containerEl)
     .setName(name)
     .setDesc(desc)
     .addText((text) => {
       text.setValue(String(value));
 
-      // Commit on blur or Enter, the way a native number setting behaves.
+      // Commit only on change.
       const commit = () => {
         const n = parseInt(text.getValue(), 10);
 
-        if (Number.isInteger(n) && n >= 0) {
-          saveSetting({ [key]: toStored(n) });
+        if (!Number.isInteger(n) || n < 0 || n === committed) {
+          return;
         }
+
+        committed = n;
+        saveSetting({ [key]: toStored(n) });
       };
 
       text.inputEl.addEventListener("blur", commit);
@@ -296,7 +297,12 @@ function proxyAccessField(parent, current, app) {
       emptyNote: "No hosts yet.",
       recommended: {
         note: "Restricting the proxy stops Obsidian's plugin and theme browser and updates from working unless their hosts are allowed.",
-        hosts: ["releases.obsidian.md", "github.com", "raw.githubusercontent.com"],
+        hosts: [
+          "releases.obsidian.md",
+          "github.com",
+          "api.github.com",
+          "raw.githubusercontent.com",
+        ],
         buttonText: "Add recommended hosts",
       },
     },

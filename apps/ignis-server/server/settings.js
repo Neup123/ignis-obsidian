@@ -10,7 +10,7 @@ const DEFAULTS = {
   contentCacheBytes: 50 * 1024 * 1024,
   inputCacheBytes: 200 * 1024 * 1024,
   inputCacheTtlMs: 5 * 60 * 1000,
-  writeCoalesceMs: 5000,
+  writeCoalesceMs: 0,
   maxBodyBytes: 50 * 1024 * 1024,
   // "any" reaches any public host, "allowlist" restricts to proxyAllowlist, "disabled" blocks all proxying.
   proxyMode: "any",
