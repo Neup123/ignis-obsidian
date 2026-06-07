@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.5] - Karm (2026-06-07)
+
+### Added
+
+- Server settings panel in the Ignis settings tab.
+- `assert`, `constants`, and `stream` shims, plus callback-style `fs` methods and `realpath`.
+
+### Changed
+
+- Write coalescing is now off by default (`WRITE_COALESCE_MS=0`).
+
+### Fixed
+
+- Native menus now stay disabled on platforms where its default is true
+- `/app/data` is now created and owned by the runtime user.
+- Caddy reverse-proxy example uses the current `basic_auth` directive.
+
+### Security
+
+- Cross-origin proxy rejects requests that resolve to private, loopback, or link-local addresses (SSRF guard).
+
 ## [0.8.4] - Karm (2026-06-03)
 
 ### Fixed

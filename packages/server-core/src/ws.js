@@ -2,6 +2,11 @@ const { WebSocketServer } = require("ws");
 const url = require("url");
 const watcher = require("./watcher");
 
+// Null / undefined / empty array means no Origin check.
+function toOriginSet(list) {
+  return Array.isArray(list) && list.length > 0 ? new Set(list) : null;
+}
+
 function setupWebSocket(server, opts = {}) {
   const { getVaultPath, originAllowlist } = opts;
 
@@ -9,11 +14,7 @@ function setupWebSocket(server, opts = {}) {
     throw new Error("setupWebSocket: opts.getVaultPath is required");
   }
 
-  // Null / undefined / empty array = no Origin check.
-  const originSet =
-    Array.isArray(originAllowlist) && originAllowlist.length > 0
-      ? new Set(originAllowlist)
-      : null;
+  const originSet = toOriginSet(originAllowlist);
 
   const wss = new WebSocketServer({ server, path: "/ws" });
 

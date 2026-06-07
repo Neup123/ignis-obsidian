@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const compression = require("compression");
 const config = require("./config");
+const settings = require("./settings");
 const { getVersion } = require("./version");
 const {
   setupWebSocket,
@@ -19,7 +20,7 @@ const {
   getBundledPluginDirs,
 } = require("./plugin-system/manager");
 const pluginRoutes = require("./routes/plugins");
-writeCoalescer.configure({ writeCoalesceMs: config.writeCoalesceMs });
+writeCoalescer.configure({ writeCoalesceMs: settings.get("writeCoalesceMs") });
 const { flushAll } = writeCoalescer;
 const { setupDemo, wireDemoWebSocket } = require("./demo");
 
@@ -32,7 +33,18 @@ const ANSI_RESET = "\x1b[0m";
 
 const app = express();
 
-app.use(express.json({ limit: "50mb" }));
+// Reject oversized requests by Content-Length before parsing.
+app.use((req, res, next) => {
+  const declared = Number(req.headers["content-length"]);
+
+  if (Number.isFinite(declared) && declared > settings.get("maxBodyBytes")) {
+    return res.status(413).json({ error: "Request body too large" });
+  }
+
+  next();
+});
+
+app.use(express.json({ limit: settings.MAX_BODY_BACKSTOP }));
 app.use(compression());
 
 // logger middleware
@@ -66,6 +78,7 @@ const fsRoutes = require("./routes/fs");
 const vaultRoutes = require("./routes/vault");
 const proxyRoutes = require("./routes/proxy");
 const versionRoutes = require("./routes/version");
+const settingsRoutes = require("./routes/settings");
 const bootstrapRoutes = require("./routes/bootstrap");
 
 app.use("/assets", express.static(path.join(__dirname, "assets")));
@@ -78,6 +91,7 @@ app.use("/api/fs", fsRoutes);
 app.use("/api/vault", vaultRoutes);
 app.use("/api/proxy", proxyRoutes);
 app.use("/api/version", versionRoutes);
+app.use("/api/settings", settingsRoutes);
 app.use("/api/plugins", pluginRoutes);
 app.use("/api/bootstrap", bootstrapRoutes);
 
@@ -197,7 +211,7 @@ const server = app.listen(config.port, async () => {
 
 const wss = setupWebSocket(server, {
   getVaultPath: config.getVaultPath,
-  originAllowlist: config.wsOrigins,
+  originAllowlist: settings.get("wsOrigins"),
 });
 wireDemoWebSocket(server);
 
