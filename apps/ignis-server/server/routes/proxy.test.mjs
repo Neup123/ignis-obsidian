@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const { isPrivateIp } = require("./proxy.js");
+const { isPrivateIp, proxyRequest } = require("./proxy.js");
 
 describe("isPrivateIp", () => {
   it("flags private and link-local IPv4", () => {
@@ -58,5 +58,19 @@ describe("isPrivateIp", () => {
   it("returns false for non-IP input", () => {
     expect(isPrivateIp("not-an-ip")).toBe(false);
     expect(isPrivateIp("")).toBe(false);
+  });
+});
+
+describe("proxyRequest guard", () => {
+  it("rejects a hostname that resolves to a private address", async () => {
+    await expect(
+      proxyRequest({ url: "http://localhost/", method: "GET", headers: {} }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it("rejects a private IP literal (no DNS lookup runs for literals)", async () => {
+    await expect(
+      proxyRequest({ url: "http://127.0.0.1/", method: "GET", headers: {} }),
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 });
