@@ -52,8 +52,79 @@ function isPrivateIp(ip) {
   return false;
 }
 
+function ipv4ToInt(ip) {
+  return ip
+    .split(".")
+    .reduce((acc, oct) => ((acc << 8) + Number(oct)) >>> 0, 0);
+}
+
+// Parse PROXY_ALLOW_PRIVATE_HOSTS into matchers.
+// Exact IPs (v4 and v6) and IPv4 CIDRs are supported; IPv6 CIDR and malformed entries are ignored.
+function buildAllowList(entries) {
+  const exact = new Set();
+  const cidrV4 = [];
+
+  for (const entry of entries) {
+    const slash = entry.indexOf("/");
+
+    if (slash === -1) {
+      if (net.isIP(entry)) {
+        exact.add(entry);
+      } else {
+        console.warn(
+          "[proxy] ignoring invalid PROXY_ALLOW_PRIVATE_HOSTS entry:",
+          entry,
+        );
+      }
+
+      continue;
+    }
+
+    const base = entry.slice(0, slash);
+    const prefix = Number(entry.slice(slash + 1));
+
+    if (
+      net.isIP(base) === 4 &&
+      Number.isInteger(prefix) &&
+      prefix >= 0 &&
+      prefix <= 32
+    ) {
+      const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+      cidrV4.push({ network: (ipv4ToInt(base) & mask) >>> 0, mask });
+    } else {
+      console.warn(
+        "[proxy] ignoring unsupported PROXY_ALLOW_PRIVATE_HOSTS entry:",
+        entry,
+      );
+    }
+  }
+
+  return { exact, cidrV4 };
+}
+
+function allowsAddress(allow, ip) {
+  if (allow.exact.has(ip)) {
+    return true;
+  }
+
+  if (net.isIP(ip) === 4) {
+    const value = ipv4ToInt(ip);
+
+    for (const { network, mask } of allow.cidrV4) {
+      if ((value & mask) >>> 0 === network) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+const privateAllowList = buildAllowList(settings.get("proxyAllowPrivate"));
+
+// A public address always passes; a private one passes only when listed it in PROXY_ALLOW_PRIVATE_HOSTS.
 function addressAllowed(ip) {
-  return !isPrivateIp(ip);
+  return !isPrivateIp(ip) || allowsAddress(privateAllowList, ip);
 }
 
 function httpError(status, message) {
@@ -354,3 +425,5 @@ router.post("/", async (req, res) => {
 module.exports = router;
 module.exports.isPrivateIp = isPrivateIp;
 module.exports.proxyRequest = proxyRequest;
+module.exports.buildAllowList = buildAllowList;
+module.exports.allowsAddress = allowsAddress;

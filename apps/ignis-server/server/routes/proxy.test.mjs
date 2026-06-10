@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const { isPrivateIp, proxyRequest } = require("./proxy.js");
+const { isPrivateIp, proxyRequest, buildAllowList, allowsAddress } =
+  require("./proxy.js");
 
 describe("isPrivateIp", () => {
   it("flags private and link-local IPv4", () => {
@@ -72,5 +73,26 @@ describe("proxyRequest guard", () => {
     await expect(
       proxyRequest({ url: "http://127.0.0.1/", method: "GET", headers: {} }),
     ).rejects.toMatchObject({ statusCode: 403 });
+  });
+});
+
+describe("proxy private-host allow list", () => {
+  it("allows exact IPs and IPv4 CIDRs, rejects everything else", () => {
+    const allow = buildAllowList(["192.168.0.0/16", "10.1.2.3", "::1"]);
+
+    expect(allowsAddress(allow, "192.168.1.5")).toBe(true);
+    expect(allowsAddress(allow, "192.169.0.1")).toBe(false);
+    expect(allowsAddress(allow, "10.1.2.3")).toBe(true);
+    expect(allowsAddress(allow, "10.1.2.4")).toBe(false);
+    expect(allowsAddress(allow, "::1")).toBe(true);
+    expect(allowsAddress(allow, "8.8.8.8")).toBe(false);
+  });
+
+  it("ignores IPv6 CIDR and malformed entries", () => {
+    const allow = buildAllowList(["fd00::/8", "garbage", "192.168.0.0/33"]);
+
+    expect(allow.exact.size).toBe(0);
+    expect(allow.cidrV4.length).toBe(0);
+    expect(allowsAddress(allow, "fd00::1")).toBe(false);
   });
 });
