@@ -18,6 +18,7 @@ const {
   touchSession,
 } = require("./demo-sessions");
 const { ensureDefaultVault } = require("./demo-provision");
+const { sanitizeError } = require("@ignis/server-core");
 
 const ALLOWED_PROXY_HOSTS = new Set([
   "releases.obsidian.md",
@@ -406,7 +407,7 @@ function provisionEndpoint(req, res) {
     })
     .catch((e) => {
       console.error("[demo] provision error:", e);
-      res.status(500).json({ error: e.message });
+      res.status(500).json(sanitizeError(e));
     });
 }
 

@@ -15,6 +15,7 @@ const {
 } = require("../plugin-system/manager");
 const { getVersion } = require("../version");
 const settings = require("../settings");
+const { sanitizeError } = require("@ignis/server-core");
 
 const router = express.Router();
 
@@ -255,7 +256,7 @@ router.get("/", async (req, res) => {
     res.json(entry.response);
   } catch (e) {
     console.error("[bootstrap] error:", e);
-    res.status(500).json({ error: e.code || "internal" });
+    res.status(500).json(sanitizeError(e));
   }
 });
 
