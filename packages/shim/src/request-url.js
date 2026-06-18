@@ -54,15 +54,12 @@ function makeResponse(request, status, headers, arrayBuf) {
 export function installRequestUrlShim() {
   // Obsidian sets window.requestUrl in app.js. We override it once the page loads.
   // Use a getter so it intercepts even if app.js sets it later.
-  let _original = null;
-
   Object.defineProperty(window, "requestUrl", {
     get() {
       return proxyRequestUrl;
     },
-    set(val) {
-      _original = val;
-    },
+    // Swallow Obsidian's later assignment so the shim keeps serving its own requestUrl.
+    set() {},
     configurable: true,
   });
 }

@@ -64,6 +64,7 @@ async function cleanupExpired() {
   }
 
   // Correct optimistic-quota drift for the sessions that remain (copyFile and mkdir add bytes the per-request quota gate does not count).
+  // eslint-disable-next-line unicorn/no-useless-spread
   for (const sessionId of [...sessions.keys()]) {
     await recomputeBytes(sessionId);
   }

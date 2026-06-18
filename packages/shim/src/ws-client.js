@@ -204,7 +204,7 @@ export function createWsClient() {
   }
 
   function send(type, payload) {
-    postRaw({ type, ...(payload || {}) });
+    postRaw({ type, ...payload });
   }
 
   function channel(name) {
@@ -251,7 +251,7 @@ export function createWsClient() {
       },
 
       send(type, payload) {
-        postRaw({ channel: name, type, ...(payload || {}) });
+        postRaw({ channel: name, type, ...payload });
       },
     };
   }

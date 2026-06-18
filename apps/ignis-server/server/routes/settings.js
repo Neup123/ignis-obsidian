@@ -82,6 +82,7 @@ router.post("/", (req, res) => {
     clean = validate(req.body || {});
   } catch (e) {
     // validate() throws deliberate, safe messages naming the invalid setting; don't use sanitizeError.
+    // leak-allow
     return res.status(400).json({ error: e.message });
   }
 

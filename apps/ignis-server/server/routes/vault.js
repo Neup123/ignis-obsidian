@@ -15,7 +15,7 @@ function isValidVaultName(name) {
     return false;
   }
 
-  if (/[\/\\:*?"<>|]/.test(name)) {
+  if (/[/\\:*?"<>|]/.test(name)) {
     return false;
   }
 

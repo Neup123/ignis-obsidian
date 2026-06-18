@@ -122,7 +122,7 @@ function initVaultConfigFallback() {
 function initVaultListFallback() {
   try {
     vaultService.listVaultsSync();
-  } catch (e) {
+  } catch {
     window.__vaultList = [];
   }
 }

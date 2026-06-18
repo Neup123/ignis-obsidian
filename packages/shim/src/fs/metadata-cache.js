@@ -62,7 +62,7 @@ export class MetadataCache {
     const results = [];
     const seen = new Set();
 
-    for (const [key, meta] of this._entries) {
+    for (const key of this._entries.keys()) {
       if (prefix === "" || key.startsWith(prefix)) {
         const rest = key.slice(prefix.length);
         const slashIdx = rest.indexOf("/");

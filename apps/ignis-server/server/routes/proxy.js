@@ -362,6 +362,7 @@ router.post("/", async (req, res) => {
     await assertPublicUrl(url);
   } catch (e) {
     // assertPublicUrl throws deliberate, safe guard messages (blocked host, bad scheme); don't use sanitizeError.
+    // leak-allow
     return res.status(e.statusCode || 400).json({ error: e.message });
   }
 

@@ -38,7 +38,7 @@ function display(containerEl, app) {
 
   const header = containerEl.createDiv("ignis-header");
 
-  const logo = header.createEl("img", {
+  header.createEl("img", {
     cls: "ignis-header-logo",
     attr: { src: "/assets/ignis.webp", alt: "Ignis" },
   });
@@ -70,7 +70,7 @@ function display(containerEl, app) {
     attr: { target: "_blank", "aria-label": "GitHub" },
   });
 
-  const githubIcon = githubLink.createEl("img", {
+  githubLink.createEl("img", {
     cls: "ignis-github-icon",
     attr: { src: "/assets/github.svg", alt: "GitHub" },
   });
