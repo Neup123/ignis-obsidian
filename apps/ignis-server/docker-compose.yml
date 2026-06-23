@@ -1,8 +1,8 @@
 services:
   ignis:
     build:
-      context: ../..
-      dockerfile: apps/ignis-server/Dockerfile
+      context: ./
+      dockerfile: Dockerfile
     ports:
       - "8082:8080"
     environment:
