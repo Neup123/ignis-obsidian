@@ -12,6 +12,9 @@ services:
       - ./data:/app/data
       - obsidian-app:/app/obsidian-app
     restart: unless-stopped
+    lables:
+      - traefik.http.routers.https-0-m5vzqnr71jws8v1ewvm63ouu-ignis.middlewares=gzip,authelia@file 
+
 
 volumes:
   obsidian-app:
