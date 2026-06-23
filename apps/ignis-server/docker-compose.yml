@@ -1,10 +1,10 @@
 services:
   ignis:
     build:
-      context: ./
+      context: .
       dockerfile: Dockerfile
     ports:
-      - "8082:8080"
+      - "8085:8080"
     environment:
       - OBSIDIAN_VERSION=1.12.7
     volumes:
