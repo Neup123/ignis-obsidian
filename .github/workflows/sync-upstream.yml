@@ -1,24 +1,39 @@
-name: Sync Upstream
+name: Scheduled Auto-Merge Upstream
 
 on:
   schedule:
     - cron: '0 0 * * *' # Runs daily at midnight UTC
-  workflow_dispatch: # Allows you to manually click "Run workflow" in the Actions tab
+  workflow_dispatch: # Allows you to trigger it manually via the Actions tab
 
 jobs:
-  sync:
+  auto-merge:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout target repo
+      - name: Checkout your fork
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # Fetches all history so git can merge properly
 
-      - name: Sync upstream changes
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
-        with:
-          target_sync_branch: main
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-          upstream_sync_branch: main
-          upstream_sync_repo: Nystik-gh/ignis
-          test_mode: false
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add and Fetch Upstream
+        run: |
+          git remote add upstream https://github.com/Nystik-gh/ignis.git
+          git fetch upstream main
+
+      - name: Merge Upstream into Fork
+        run: |
+          # Change 'main' to whatever branch name you are running your code from
+          git checkout main
+          
+          # Attempt a standard git merge. 
+          # The -m flag provides an automated commit message.
+          git merge upstream/main -m "Automated merge: synced with upstream changes"
+
+      - name: Push merged changes back to Fork
+        run: |
+          git push origin main
