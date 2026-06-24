@@ -2,8 +2,8 @@ name: Sync Upstream
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs every day at midnight UTC
-  workflow_dispatch: # Allows you to trigger the sync manually from the GitHub UI
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
+  workflow_dispatch: # Allows you to manually click "Run workflow" in the Actions tab
 
 jobs:
   sync:
@@ -17,10 +17,8 @@ jobs:
       - name: Sync upstream changes
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
         with:
-          target_sync_branch: main        # Your fork's branch to update
+          target_sync_branch: main
           target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-          upstream_sync_branch: main      # The original repo's branch to pull from
-          upstream_sync_repo: original-owner/original-repo # Change to the source repo
-          
-          # Set to true if you want to overwrite local modifications safely
-          test_mode: false 
+          upstream_sync_branch: main
+          upstream_sync_repo: Nystik-gh/ignis
+          test_mode: false
