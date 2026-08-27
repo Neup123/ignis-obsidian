@@ -1,39 +1,71 @@
-name: Scheduled Auto-Merge Upstream
+name: Sync Ignis from upstream
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs daily at midnight UTC
-  workflow_dispatch: # Allows you to trigger it manually via the Actions tab
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-ignis-upstream
+  cancel-in-progress: false
 
 jobs:
-  auto-merge:
+  sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - name: Checkout your fork
+      - name: Check out this repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # Fetches all history so git can merge properly
+          ref: main
+          fetch-depth: 0
 
-      - name: Configure Git Identity
+      - name: Configure Git
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Add and Fetch Upstream
+      - name: Fetch upstream
         run: |
           git remote add upstream https://github.com/Nystik-gh/ignis.git
-          git fetch upstream main
+          git fetch --prune upstream main
 
-      - name: Merge Upstream into Fork
+      - name: Merge upstream and keep local Compose configuration
+        shell: bash
         run: |
-          # Change 'main' to whatever branch name you are running your code from
-          git checkout main
-          
-          # Attempt a standard git merge. 
-          # The -m flag provides an automated commit message.
-          git merge upstream/main -m "Automated merge: synced with upstream changes"
+          set -euo pipefail
 
-      - name: Push merged changes back to Fork
-        run: |
-          git push origin main
+          compose_file="apps/ignis-server/docker-compose.yml"
+          cp "$compose_file" "$RUNNER_TEMP/docker-compose.yml"
+
+          set +e
+          git merge --no-commit --no-ff upstream/main
+          merge_status=$?
+          set -e
+
+          cp "$RUNNER_TEMP/docker-compose.yml" "$compose_file"
+          git add "$compose_file"
+
+          unresolved="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$unresolved" ]; then
+            echo "Upstream has conflicts outside the preserved Compose file:"
+            echo "$unresolved"
+            git merge --abort
+            exit 1
+          fi
+
+          if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            git commit -m "Automated merge: sync Nystik-gh/ignis main"
+          elif [ "$merge_status" -ne 0 ]; then
+            echo "The merge failed without leaving a resolvable merge state."
+            exit "$merge_status"
+          else
+            echo "Already up to date."
+          fi
+
+      - name: Push synchronized main branch
+        run: git push origin main
