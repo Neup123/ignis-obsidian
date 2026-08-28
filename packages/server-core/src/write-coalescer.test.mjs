@@ -9,10 +9,18 @@ const coalescer = require("./write-coalescer.js");
 
 const SHORT_WINDOW_MS = 50;
 
+const RETRY_BACKOFF_MS = 50;
+
+// initial flush plus retries.
+const FLUSH_ATTEMPTS = 1 + 6;
+
 let tmpDir;
 
 beforeEach(async () => {
-  coalescer.configure({ writeCoalesceMs: SHORT_WINDOW_MS });
+  coalescer.configure({
+    writeCoalesceMs: SHORT_WINDOW_MS,
+    flushRetryBackoffMs: [RETRY_BACKOFF_MS],
+  });
   coalescer._reset();
   tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "coalesce-test-"));
 });
@@ -145,5 +153,208 @@ describe("flushAll", () => {
     expect(await fs.promises.readFile(fileB, "utf-8")).toBe("buffered-b");
     expect(coalescer.getPending(fileA)).toBeNull();
     expect(coalescer.getPending(fileB)).toBeNull();
+  });
+});
+
+describe("cancelPending", () => {
+  it("drops a buffered write so a deleted file does not resurrect", async () => {
+    const filePath = path.join(tmpDir, "file.txt");
+
+    await coalescer.writeCoalesced(filePath, "first", "utf-8");
+    await coalescer.writeCoalesced(filePath, "second", "utf-8");
+    await fs.promises.unlink(filePath);
+
+    expect(coalescer.cancelPending(filePath)).toBe(true);
+
+    await sleep(SHORT_WINDOW_MS + 30);
+
+    await expect(fs.promises.access(filePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(coalescer.getPending(filePath)).toBeNull();
+  });
+
+  it("returns false when nothing is pending for the path", () => {
+    expect(coalescer.cancelPending(path.join(tmpDir, "absent.txt"))).toBe(false);
+  });
+});
+
+describe("flushPending", () => {
+  it("writes the latest buffered data to disk ahead of the debounce timer", async () => {
+    const filePath = path.join(tmpDir, "file.txt");
+
+    await coalescer.writeCoalesced(filePath, "first", "utf-8");
+    await coalescer.writeCoalesced(filePath, "second", "utf-8");
+
+    expect(await coalescer.flushPending(filePath)).toBe(true);
+    expect(await fs.promises.readFile(filePath, "utf-8")).toBe("second");
+    expect(coalescer.getPending(filePath)).toBeNull();
+  });
+
+  it("returns false when nothing is pending for the path", async () => {
+    expect(await coalescer.flushPending(path.join(tmpDir, "absent.txt"))).toBe(
+      false,
+    );
+  });
+});
+
+describe("cancelPendingSubtree", () => {
+  it("drops buffered writes at or under a directory and leaves siblings and outsiders", async () => {
+    const dir = path.join(tmpDir, "sub");
+    const sibling = path.join(tmpDir, "subling");
+    await fs.promises.mkdir(dir);
+    await fs.promises.mkdir(sibling);
+
+    const inside = [path.join(dir, "a.txt"), path.join(dir, "b.txt")];
+    const outside = [path.join(tmpDir, "c.txt"), path.join(sibling, "d.txt")];
+
+    for (const f of [...inside, ...outside]) {
+      await coalescer.writeCoalesced(f, "first", "utf-8");
+      await coalescer.writeCoalesced(f, "buffered", "utf-8");
+    }
+
+    expect(coalescer.cancelPendingSubtree(dir)).toBe(2);
+
+    for (const f of inside) {
+      expect(coalescer.getPending(f)).toBeNull();
+    }
+
+    for (const f of outside) {
+      expect(coalescer.getPending(f)).not.toBeNull();
+    }
+  });
+});
+
+describe("flushPendingSubtree", () => {
+  it("flushes buffered writes at or under a directory to disk and clears them", async () => {
+    const dir = path.join(tmpDir, "sub");
+    await fs.promises.mkdir(dir);
+
+    const a = path.join(dir, "a.txt");
+    const b = path.join(dir, "b.txt");
+    const outside = path.join(tmpDir, "c.txt");
+
+    for (const f of [a, b, outside]) {
+      await coalescer.writeCoalesced(f, "first", "utf-8");
+      await coalescer.writeCoalesced(f, "buffered", "utf-8");
+    }
+
+    expect(await coalescer.flushPendingSubtree(dir)).toBe(2);
+
+    expect(await fs.promises.readFile(a, "utf-8")).toBe("buffered");
+    expect(await fs.promises.readFile(b, "utf-8")).toBe("buffered");
+    expect(coalescer.getPending(a)).toBeNull();
+    expect(coalescer.getPending(b)).toBeNull();
+    expect(coalescer.getPending(outside)).not.toBeNull();
+  });
+});
+
+describe("flush-failure durability", () => {
+  it("flushPending retains the buffer and retries when the disk write fails", async () => {
+    const filePath = path.join(tmpDir, "file.txt");
+
+    await coalescer.writeCoalesced(filePath, "first", "utf-8");
+    await coalescer.writeCoalesced(filePath, "second", "utf-8");
+
+    vi.spyOn(fs.promises, "writeFile").mockRejectedValueOnce(
+      Object.assign(new Error("EIO"), { code: "EIO" }),
+    );
+
+    await expect(coalescer.flushPending(filePath)).rejects.toThrow();
+
+    expect(coalescer.getPending(filePath)).not.toBeNull();
+    expect(coalescer.getPending(filePath).data).toBe("second");
+
+    await sleep(RETRY_BACKOFF_MS + 50);
+
+    expect(await fs.promises.readFile(filePath, "utf-8")).toBe("second");
+    expect(coalescer.getPending(filePath)).toBeNull();
+  });
+
+  it("the debounce flush retains the buffer and retries when the disk write fails", async () => {
+    const filePath = path.join(tmpDir, "file.txt");
+
+    await coalescer.writeCoalesced(filePath, "first", "utf-8");
+    await coalescer.writeCoalesced(filePath, "second", "utf-8");
+
+    vi.spyOn(fs.promises, "writeFile").mockRejectedValueOnce(
+      Object.assign(new Error("EIO"), { code: "EIO" }),
+    );
+
+    await sleep(SHORT_WINDOW_MS + 20);
+
+    expect(coalescer.getPending(filePath)).not.toBeNull();
+
+    await sleep(RETRY_BACKOFF_MS + 50);
+
+    expect(await fs.promises.readFile(filePath, "utf-8")).toBe("second");
+    expect(coalescer.getPending(filePath)).toBeNull();
+  });
+});
+
+describe("flush give-up", () => {
+  const GIVE_UP_MS = SHORT_WINDOW_MS + RETRY_BACKOFF_MS * FLUSH_ATTEMPTS + 150;
+
+  let givenUp;
+
+  beforeEach(() => {
+    givenUp = [];
+    coalescer.onFlushGiveUp((absPath) => givenUp.push(absPath));
+  });
+
+  function failWrites() {
+    return vi
+      .spyOn(fs.promises, "writeFile")
+      .mockRejectedValue(Object.assign(new Error("EIO"), { code: "EIO" }));
+  }
+
+  it("drops the buffer and reports the path after the attempt budget", async () => {
+    const filePath = path.join(tmpDir, "file.txt");
+
+    await coalescer.writeCoalesced(filePath, "first", "utf-8");
+    const spy = failWrites();
+    await coalescer.writeCoalesced(filePath, "second", "utf-8");
+
+    await sleep(GIVE_UP_MS);
+
+    expect(spy).toHaveBeenCalledTimes(FLUSH_ATTEMPTS);
+    expect(givenUp).toEqual([filePath]);
+    expect(coalescer.getPending(filePath)).toBeNull();
+    expect(await fs.promises.readFile(filePath, "utf-8")).toBe("first");
+  });
+
+  it("gives the attempt budget back to a newer write for the path", async () => {
+    const filePath = path.join(tmpDir, "file.txt");
+
+    await coalescer.writeCoalesced(filePath, "first", "utf-8");
+    const spy = failWrites();
+    await coalescer.writeCoalesced(filePath, "second", "utf-8");
+
+    // Fail one flush, buffer fresh data before the retry fires.
+    await expect(coalescer.flushPending(filePath)).rejects.toThrow();
+    await coalescer.writeCoalesced(filePath, "third", "utf-8");
+
+    await sleep(GIVE_UP_MS);
+
+    expect(givenUp).toEqual([filePath]);
+    expect(spy).toHaveBeenCalledTimes(FLUSH_ATTEMPTS + 1);
+    expect(spy.mock.calls.at(-1)[1]).toBe("third");
+  });
+
+  it("writes a newer write to a given-up path normally", async () => {
+    const filePath = path.join(tmpDir, "file.txt");
+
+    await coalescer.writeCoalesced(filePath, "first", "utf-8");
+    const spy = failWrites();
+    await coalescer.writeCoalesced(filePath, "second", "utf-8");
+
+    await sleep(GIVE_UP_MS);
+
+    expect(givenUp).toEqual([filePath]);
+
+    spy.mockRestore();
+    await coalescer.writeCoalesced(filePath, "third", "utf-8");
+
+    expect(await fs.promises.readFile(filePath, "utf-8")).toBe("third");
   });
 });

@@ -2,6 +2,67 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.10] - Karm (2026-08-20)
+
+### Changed
+
+- Faster boot: the vault file tree is served from a pre-compressed cache, and the client only resyncs metadata when it has changed.
+- Vault watchers stop after 10 minutes idle instead of on the last disconnect.
+- Improved watcher logs.
+- Write coalescing is more robust. Failed saves show error.
+
+### Fixed
+
+- Images and attachments that fail to load are retried.
+- Vault rename and remove are more reliable.
+- Renaming a vault to an existing name is rejected.
+- Websocket properly handles malformed frames.
+- `Buffer` handles base64, hex, and latin1 encodings correctly.
+
+## [0.8.9] - Karm (2026-07-30)
+
+### Added
+
+- Open a note via URL with the `?file=` query parameter, Added "as Ignis URL" option under 'Copy path' menu.
+- `queryLocalFonts` shim, `crypto.randomUUID` and `crypto.subtle.digest` shims for plain HTTP access.
+- Indicator notices for when a save is in-flight and save completion.
+- Block input while a note is loading over a slow connection.
+
+### Changed
+
+- Better warning and info when accessing in an insecure context.
+- Improved error messages for the proxy providing explanations for why a connection is blocked.
+- Updating to a new Obsidian version is now smoother.
+- Clipboard support improved over plain HTTP.
+
+### Fixed
+
+- Desktop Node APIs are no longer blocked on mobile
+- The vault switcher now functions in mobile mode.
+- Vault no longer loads from a stale browser-cached state.
+- `fs.utimes` bug fixed.
+
+## [0.8.8] - Karm (2026-07-05)
+
+### Added
+
+- Failed writes are retried in the background, with a status bar item for pending and failed writes.
+- A symlink under `VAULT_ROOT` pointing at a directory is discovered as a vault.
+
+### Changed
+
+- Boot prefetch skips plugin asset directories and reads batches in parallel.
+- A `chown` that fails on startup (read-only or NFS `root_squash` mounts) logs a warning instead of aborting.
+- The "Spellcheck languages" setting is disabled, with a link to the browser's own language settings.
+
+### Fixed
+
+- WebDAV uploads through the cross-origin proxy no longer corrupt; the proxy recomputes `Content-Length` for the request body.
+
+### Security
+
+- `resolveVaultPath` resolves symlinks and confines each access to the vault's real path.
+
 ## [0.8.7] - Karm (2026-06-19)
 
 ### Added
@@ -114,7 +175,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Demo mode: per-session vaults, auto-cleanup, proxy allowlist, login blocking. See [examples/demo/](examples/demo/).
+- Demo mode: per-session vaults, auto-cleanup, proxy allowlist, login blocking. See [examples/demo/](https://github.com/Nystik-gh/ignis/tree/main/apps/ignis-server/examples/demo).
 - No-op guard in the bridge plugin and headless-sync plugin when loaded outside Ignis.
 - "Open workspace in new tab" command now loads the workspace preset rather than the per-tab live state.
 - Real digests for `crypto.createHash` (SHA-1/SHA-256/SHA-512/MD5) via `@noble/hashes`.

@@ -9,7 +9,14 @@ const {
   resolveVaultPath,
   sanitizeError,
 } = require("@ignis/server-core");
-const { writeCoalesced, getPending } = writeCoalescer;
+const {
+  writeCoalesced,
+  getPending,
+  cancelPending,
+  flushPending,
+  cancelPendingSubtree,
+  flushPendingSubtree,
+} = writeCoalescer;
 const bootstrapRoutes = require("./bootstrap");
 
 const router = express.Router();
@@ -97,44 +104,7 @@ router.get("/stat", async (req, res) => {
       ctime: stat.ctimeMs,
     });
   } catch (e) {
-    res
-      .status(e.code === "ENOENT" ? 404 : 500)
-      .json(sanitizeError(e));
-  }
-});
-
-// GET /api/fs/readdir?path=...
-router.get("/readdir", async (req, res) => {
-  const resolved = guardPath(req, res);
-
-  if (!resolved) {
-    return;
-  }
-
-  try {
-    // Check if path is a file. return ENOTDIR instead of crashing
-    const stat = await fs.promises.stat(resolved);
-
-    if (!stat.isDirectory()) {
-      return res
-        .status(400)
-        .json({ error: "ENOTDIR: not a directory", code: "ENOTDIR" });
-    }
-
-    const entries = await fs.promises.readdir(resolved, {
-      withFileTypes: true,
-    });
-
-    res.json(
-      entries.map((e) => ({
-        name: e.name,
-        type: e.isDirectory() ? "directory" : "file",
-      })),
-    );
-  } catch (e) {
-    res
-      .status(e.code === "ENOENT" ? 404 : 500)
-      .json(sanitizeError(e));
+    res.status(e.code === "ENOENT" ? 404 : 500).json(sanitizeError(e));
   }
 });
 
@@ -183,9 +153,7 @@ router.get("/readFile", async (req, res) => {
       res.type("application/octet-stream").send(data);
     }
   } catch (e) {
-    res
-      .status(e.code === "ENOENT" ? 404 : 500)
-      .json(sanitizeError(e));
+    res.status(e.code === "ENOENT" ? 404 : 500).json(sanitizeError(e));
   }
 });
 
@@ -227,6 +195,7 @@ router.post("/appendFile", async (req, res) => {
   }
 
   try {
+    await flushPending(resolved);
     await fs.promises.appendFile(resolved, req.body.content, "utf-8");
 
     invalidateBootstrap(req);
@@ -248,6 +217,7 @@ router.post("/mkdir", async (req, res) => {
     await fs.promises.mkdir(resolved, {
       recursive: !!req.body.recursive,
     });
+    cancelPending(resolved);
 
     invalidateBootstrap(req);
     res.json({ ok: true });
@@ -276,7 +246,10 @@ router.post("/rename", async (req, res) => {
   }
 
   try {
+    await flushPending(oldResolved);
     await fs.promises.rename(oldResolved, newResolved);
+    // Drop the destination's buffer so a stale write cannot land on the renamed file.
+    cancelPending(newResolved);
 
     invalidateBootstrap(req);
     res.json({ ok: true });
@@ -305,7 +278,9 @@ router.post("/copyFile", async (req, res) => {
   }
 
   try {
+    await flushPending(srcResolved);
     await fs.promises.copyFile(srcResolved, destResolved);
+    cancelPending(destResolved);
 
     invalidateBootstrap(req);
     res.json({ ok: true });
@@ -324,12 +299,14 @@ router.delete("/unlink", async (req, res) => {
 
   try {
     await fs.promises.unlink(resolved);
+    cancelPending(resolved);
 
     invalidateBootstrap(req);
     res.json({ ok: true });
   } catch (e) {
     if (e.code === "ENOENT") {
-      // File already gone  -  desired outcome achieved
+      // File already gone; drop any buffered write so the flush cannot re-create it.
+      cancelPending(resolved);
       res.json({ ok: true });
     } else {
       res.status(500).json(sanitizeError(e));
@@ -347,6 +324,7 @@ router.delete("/rmdir", async (req, res) => {
 
   try {
     await fs.promises.rmdir(resolved);
+    cancelPendingSubtree(resolved);
 
     invalidateBootstrap(req);
     res.json({ ok: true });
@@ -367,6 +345,11 @@ router.delete("/rm", async (req, res) => {
     await fs.promises.rm(resolved, {
       recursive: req.query.recursive === "true",
     });
+    cancelPending(resolved);
+
+    if (req.query.recursive === "true") {
+      cancelPendingSubtree(resolved);
+    }
 
     invalidateBootstrap(req);
     res.json({ ok: true });
@@ -387,9 +370,7 @@ router.get("/access", async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
-    res
-      .status(e.code === "ENOENT" ? 404 : 500)
-      .json(sanitizeError(e));
+    res.status(e.code === "ENOENT" ? 404 : 500).json(sanitizeError(e));
   }
 });
 
@@ -472,7 +453,7 @@ router.post("/batch-read", async (req, res) => {
   res.json({ files });
 });
 
-// GET /api/fs/tree?path=...&vault=... returns full recursive file tree with metadata
+// GET /api/fs/tree?vault=... returns the full recursive file tree with metadata
 router.get("/tree", async (req, res) => {
   const vaultRoot = getVaultRoot(req, res);
 
@@ -480,46 +461,27 @@ router.get("/tree", async (req, res) => {
     return;
   }
 
-  const rootPath = req.query.path
-    ? resolveVaultPath(vaultRoot, req.query.path)
-    : vaultRoot;
-
-  if (!rootPath) {
-    return res.status(403).json({ error: "Invalid path" });
-  }
-
   try {
-    const tree = {};
+    // grab the tree from the bootstrap cache.
+    const entry = await bootstrapRoutes.getOrBuild(req._vaultId);
 
-    async function walk(dir, prefix) {
-      const entries = await fs.promises.readdir(dir, {
-        withFileTypes: true,
-      });
-
-      for (const entry of entries) {
-        const rel = prefix ? prefix + "/" + entry.name : entry.name;
-        const full = path.join(dir, entry.name);
-
-        if (entry.isDirectory()) {
-          tree[rel] = { type: "directory" };
-
-          await walk(full, rel);
-        } else {
-          const stat = await fs.promises.stat(full);
-
-          tree[rel] = {
-            type: "file",
-            size: stat.size,
-            mtime: stat.mtimeMs,
-            ctime: stat.ctimeMs,
-          };
-        }
-      }
+    if (!entry) {
+      return res.status(404).json({ error: "Vault not found" });
     }
 
-    await walk(rootPath, "");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("ETag", entry.etag);
 
-    res.json(tree);
+    if (req.headers["if-none-match"] === entry.etag) {
+      return res.status(304).end();
+    }
+
+    // The demo response rewriter mutates in place.
+    if (req._demoSessionId) {
+      return res.json(JSON.parse(JSON.stringify(entry.response.tree)));
+    }
+
+    res.json(entry.response.tree);
   } catch (e) {
     res.status(500).json(sanitizeError(e));
   }
@@ -534,6 +496,22 @@ router.get("/download", async (req, res) => {
   }
 
   try {
+    const filename = path.basename(resolved);
+    const buffered = getPending(resolved);
+
+    if (buffered) {
+      const body = Buffer.isBuffer(buffered.data)
+        ? buffered.data
+        : Buffer.from(buffered.data, buffered.encoding || "utf-8");
+
+      res.setHeader(
+        "Content-Disposition",
+        encodeContentDispositionFilename(filename),
+      );
+      res.setHeader("Content-Type", "application/octet-stream");
+      return res.send(body);
+    }
+
     const stat = await fs.promises.stat(resolved);
 
     if (stat.isDirectory()) {
@@ -542,16 +520,13 @@ router.get("/download", async (req, res) => {
         .json({ error: "Use /download-zip for directories" });
     }
 
-    const filename = path.basename(resolved);
     res.setHeader(
       "Content-Disposition",
       encodeContentDispositionFilename(filename),
     );
     res.sendFile(resolved);
   } catch (e) {
-    res
-      .status(e.code === "ENOENT" ? 404 : 500)
-      .json(sanitizeError(e));
+    res.status(e.code === "ENOENT" ? 404 : 500).json(sanitizeError(e));
   }
 });
 
@@ -569,6 +544,9 @@ router.get("/download-zip", async (req, res) => {
     if (!stat.isDirectory()) {
       return res.status(400).json({ error: "Not a directory" });
     }
+
+    // Persist buffered writes under the directory so archiver reads current bytes from disk.
+    await flushPendingSubtree(resolved);
 
     const folderName = path.basename(resolved);
     res.setHeader("Content-Type", "application/zip");
@@ -590,9 +568,7 @@ router.get("/download-zip", async (req, res) => {
     );
     archive.finalize();
   } catch (e) {
-    res
-      .status(e.code === "ENOENT" ? 404 : 500)
-      .json(sanitizeError(e));
+    res.status(e.code === "ENOENT" ? 404 : 500).json(sanitizeError(e));
   }
 });
 

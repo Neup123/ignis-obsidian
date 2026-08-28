@@ -3,6 +3,7 @@
 // Throws an Error carrying the server's message on failure.
 
 import { arrayBufferToBase64, base64ToArrayBuffer } from "./base64.js";
+import { isProxyBlock, reportProxyBlock } from "./proxy-block.js";
 
 export async function proxyFetch({ url, method, headers, body, contentType }) {
   let encodedBody = null;
@@ -12,7 +13,10 @@ export async function proxyFetch({ url, method, headers, body, contentType }) {
     encodedBody = arrayBufferToBase64(body);
     binary = true;
   } else if (body instanceof Uint8Array) {
-    encodedBody = arrayBufferToBase64(body.buffer);
+    // A Uint8Array can be a view into a larger buffer (nonzero byteOffset, or shorter byteLength), so encode only the view's region.
+    encodedBody = arrayBufferToBase64(
+      body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+    );
     binary = true;
   } else if (body != null) {
     encodedBody = body;
@@ -41,6 +45,11 @@ export async function proxyFetch({ url, method, headers, body, contentType }) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+
+    if (isProxyBlock(err)) {
+      reportProxyBlock(err);
+    }
+
     throw new Error(err.error || "Proxy request failed");
   }
 

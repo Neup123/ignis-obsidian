@@ -15,15 +15,20 @@ const {
 } = require("../plugin-system/manager");
 const { getVersion } = require("../version");
 const settings = require("../settings");
-const { sanitizeError } = require("@ignis/server-core");
+const { sanitizeError, writeCoalescer } = require("@ignis/server-core");
+const { getPending } = writeCoalescer;
 
 const router = express.Router();
 
-// vaultId -> { response, dirMtimes, compressed: { br, gz } }
+// vaultId -> { response, dirMtimes, compressed: { br, gz }, etag }
 const cache = new Map();
 
 // vaultId -> Promise<entry>  (in-flight build dedup)
 const pendingBuilds = new Map();
+
+// The nonce keeps /tree ETags from repeating across server restarts.
+const bootNonce = require("crypto").randomBytes(6).toString("hex");
+let revisionCounter = 0;
 
 function preCompress(buf) {
   return Promise.all([
@@ -61,14 +66,30 @@ async function walkTree(rootPath) {
         await walk(full, rel);
       } else {
         try {
-          const s = await fsp.stat(full);
+          const buffered = getPending(full);
 
-          tree[rel] = {
-            type: "file",
-            size: s.size,
-            mtime: s.mtimeMs,
-            ctime: s.ctimeMs,
-          };
+          if (buffered) {
+            const s = await fsp.stat(full).catch(() => null);
+            const size = Buffer.isBuffer(buffered.data)
+              ? buffered.data.length
+              : Buffer.byteLength(buffered.data, buffered.encoding || "utf-8");
+
+            tree[rel] = {
+              type: "file",
+              size,
+              mtime: Date.now(),
+              ctime: s ? s.ctimeMs : Date.now(),
+            };
+          } else {
+            const s = await fsp.stat(full);
+
+            tree[rel] = {
+              type: "file",
+              size: s.size,
+              mtime: s.mtimeMs,
+              ctime: s.ctimeMs,
+            };
+          }
         } catch {
           tree[rel] = { type: "file" };
         }
@@ -132,6 +153,7 @@ async function buildEntry(vaultId) {
   }
 
   const t0 = Date.now();
+  const etag = '"' + bootNonce + "-" + ++revisionCounter + '"';
   const vault = buildVaultInfo(vaultId, vaultPath);
   const { tree, dirMtimes } = await walkTree(vaultPath);
 
@@ -139,6 +161,7 @@ async function buildEntry(vaultId) {
     vault,
     vaultList: buildVaultList(),
     tree,
+    treeRevision: etag,
     // In demo mode, hide server-side plugins from the client.
     plugins: config.demoMode ? [] : getDiscoveredPlugins(),
     virtualPlugins: getVirtualPluginsForVault(vaultId, getVersion()),
@@ -159,7 +182,7 @@ async function buildEntry(vaultId) {
     console.warn("[bootstrap] precompression failed:", e.message);
   }
 
-  const entry = { response, dirMtimes, compressed };
+  const entry = { response, dirMtimes, compressed, etag };
   cache.set(vaultId, entry);
 
   const ms = Date.now() - t0;
@@ -223,6 +246,9 @@ router.get("/", async (req, res) => {
       return res.status(404).json({ error: "Vault not found" });
     }
 
+    // don't cache the bootstrap response, since it contains the metadata tree which can change frequently.
+    res.setHeader("Cache-Control", "no-store");
+
     // In demo mode, route through res.json so the demo middleware can translate vault names per-session.
     // The pre-compressed buffer path bakes the storage prefix in and would bypass the response wrapper.
     // Deep-clone so the demo translator's in-place mutation doesn't pollute the cached response object.
@@ -249,7 +275,6 @@ router.get("/", async (req, res) => {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.setHeader("Content-Encoding", encoding);
       res.setHeader("Content-Length", buf.length);
-      res.setHeader("Cache-Control", "no-cache");
 
       return res.status(200).end(buf);
     }
@@ -265,3 +290,5 @@ module.exports = router;
 module.exports.invalidateVault = invalidateVault;
 module.exports.invalidateAll = invalidateAll;
 module.exports.warmUp = warmUp;
+module.exports.walkTree = walkTree;
+module.exports.getOrBuild = getOrBuild;
