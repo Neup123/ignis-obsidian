@@ -1,3 +1,4 @@
+import { Platform } from "obsidian";
 import * as generalTab from "./general-tab.js";
 import * as vaultTab from "./vault-tab.js";
 import * as serverPluginsTab from "./server-plugins-tab.js";
@@ -128,6 +129,8 @@ function injectIgnisSettings(setting, app, plugin) {
 
   hideIgnisFromCommunityPlugins(setting);
   setupPluginTabs(setting, corePlugins.items);
+
+  return tabs;
 }
 
 function patchSettingsModal(plugin) {
@@ -136,8 +139,17 @@ function patchSettingsModal(plugin) {
   plugin._originalOnOpen = original;
 
   plugin.app.setting.onOpen = function () {
+    // read before obsidian overwrites it.
+    const lastTabId = this.lastTabId;
+
     original.call(this);
-    injectIgnisSettings(this, app, plugin);
+
+    const tabs = injectIgnisSettings(this, app, plugin);
+    const lastTab = tabs.find((tab) => tab.id === lastTabId);
+
+    if (lastTab && !Platform.isPhone) {
+      this.openTab(lastTab);
+    }
   };
 }
 
