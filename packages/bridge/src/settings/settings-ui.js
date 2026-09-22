@@ -46,6 +46,11 @@ function createTab(id, name, displayFn, app, icon) {
     icon: icon || null,
     containerEl: createDiv("vertical-tab-content"),
     navEl: null,
+    renderedItems: [],
+
+    renderTab() {
+      this.display();
+    },
 
     display() {
       this.containerEl.empty();
@@ -60,7 +65,7 @@ function createTab(id, name, displayFn, app, icon) {
   return tab;
 }
 
-function createGroup(name) {
+function createGroup(name, section) {
   const group = document.createElement("div");
   group.className = "vertical-tab-header-group";
 
@@ -71,6 +76,7 @@ function createGroup(name) {
 
   const items = document.createElement("div");
   items.className = "vertical-tab-header-group-items";
+  items.setAttribute("data-section", section);
   group.appendChild(items);
 
   return { group, items };
@@ -84,20 +90,6 @@ function createSettingGroup(containerEl, heading) {
   }
 
   return group.createDiv("setting-items");
-}
-
-function findGroupByTitle(tabHeadersEl, title) {
-  const groups = tabHeadersEl.querySelectorAll(".vertical-tab-header-group");
-
-  for (const g of groups) {
-    const t = g.querySelector(".vertical-tab-header-group-title");
-
-    if (t?.textContent === title) {
-      return g;
-    }
-  }
-
-  return null;
 }
 
 async function saveSetting(partial) {
@@ -121,11 +113,4 @@ async function saveSetting(partial) {
   }
 }
 
-export {
-  createNavEl,
-  createTab,
-  createGroup,
-  createSettingGroup,
-  findGroupByTitle,
-  saveSetting,
-};
+export { createNavEl, createTab, createGroup, createSettingGroup, saveSetting };

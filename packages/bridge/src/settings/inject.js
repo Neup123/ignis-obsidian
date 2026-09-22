@@ -9,50 +9,64 @@ import {
   hideIgnisFromCommunityPlugins,
   restoreCommunityPlugins,
   clearOwnedPluginIds,
+  disconnectCommunityObserver,
 } from "./plugin-tabs.js";
 
-function removeExistingIgnisGroups(tabHeadersEl) {
-  const groups = tabHeadersEl.querySelectorAll(".vertical-tab-header-group");
+function removeExistingIgnisGroups(setting) {
+  const sections = setting.tabHeadersEl.querySelectorAll(
+    '[data-section="ignis"], [data-section="ignis-core-plugins"]',
+  );
 
-  for (const g of groups) {
-    const title = g.querySelector(".vertical-tab-header-group-title");
-
-    if (
-      title?.textContent === "Ignis" ||
-      title?.textContent === "Ignis Core Plugins"
-    ) {
-      g.remove();
-    }
+  for (const items of sections) {
+    items.closest(".vertical-tab-header-group")?.remove();
   }
 }
 
-function replaceInstallerVersionRow(setting, ignisVersion) {
-  const container = setting.tabContentContainer || setting.contentEl;
+function writeVersionRow(versionSetting, ignisVersion) {
+  const desc = versionSetting.descEl;
 
-  if (!container) {
+  desc.empty();
+  desc.createEl("strong", { text: `Running in Ignis v${ignisVersion}` });
+  desc.createEl("br");
+  desc.appendText(
+    "Obsidian is served through Ignis. There's no installer to update.",
+  );
+}
+
+// Replace the installer version with the Ignis version.
+function patchVersionRow(setting, ignisVersion) {
+  const aboutTab = setting.settingTabs.find((t) => t.id === "about");
+
+  if (!aboutTab || aboutTab._ignisOriginalUpdateVersionSetting) {
     return;
   }
 
-  const rows = container.querySelectorAll(".setting-item");
+  const original = aboutTab.updateVersionSetting;
+  aboutTab._ignisOriginalUpdateVersionSetting = original;
 
-  for (const row of rows) {
-    const desc = row.querySelector(".setting-item-description");
+  aboutTab.updateVersionSetting = function () {
+    original.call(this);
 
-    if (!desc || !desc.textContent.startsWith("Installer version:")) {
-      continue;
+    if (this.currentVersionSetting) {
+      writeVersionRow(this.currentVersionSetting, ignisVersion);
     }
+  };
 
-    desc.empty();
-    desc.createEl("strong", { text: `Running in Ignis v${ignisVersion}` });
-    desc.createEl("br");
-    desc.appendText(
-      "Obsidian is served through Ignis. There's no installer to update.",
-    );
-    break;
+  if (aboutTab.currentVersionSetting) {
+    writeVersionRow(aboutTab.currentVersionSetting, ignisVersion);
   }
 }
 
-function patchOpenTab(setting, plugin) {
+function unpatchVersionRow(setting) {
+  const aboutTab = setting.settingTabs.find((t) => t.id === "about");
+
+  if (aboutTab?._ignisOriginalUpdateVersionSetting) {
+    aboutTab.updateVersionSetting = aboutTab._ignisOriginalUpdateVersionSetting;
+    delete aboutTab._ignisOriginalUpdateVersionSetting;
+  }
+}
+
+function patchOpenTab(setting) {
   if (setting._ignisOpenTabPatched) {
     return;
   }
@@ -74,24 +88,20 @@ function patchOpenTab(setting, plugin) {
     if (navEl) {
       navEl.addClass("is-active");
     }
-
-    if (tab && tab.id === "about") {
-      replaceInstallerVersionRow(setting, plugin.manifest.version);
-    }
   };
 
   setting._ignisOpenTabPatched = true;
 }
 
 function injectIgnisSettings(setting, app, plugin) {
-  removeExistingIgnisGroups(setting.tabHeadersEl);
+  removeExistingIgnisGroups(setting);
   clearOwnedPluginIds();
   allIgnisNavEls.clear();
 
-  patchOpenTab(setting, plugin);
-  replaceInstallerVersionRow(setting, plugin.manifest.version);
+  patchOpenTab(setting);
+  patchVersionRow(setting, plugin.manifest.version);
 
-  const ignis = createGroup("Ignis");
+  const ignis = createGroup("Ignis", "ignis");
 
   const tabs = [
     createTab("ignis-general", "General", generalTab.display, app, "flame"),
@@ -111,10 +121,10 @@ function injectIgnisSettings(setting, app, plugin) {
     allIgnisNavEls.set(tab.id, tab.navEl);
   }
 
-  setting.tabHeadersEl.appendChild(ignis.group);
+  setting.tabGroupContainerEl.appendChild(ignis.group);
 
-  const corePlugins = createGroup("Ignis Core Plugins");
-  setting.tabHeadersEl.appendChild(corePlugins.group);
+  const corePlugins = createGroup("Ignis Core Plugins", "ignis-core-plugins");
+  setting.tabGroupContainerEl.appendChild(corePlugins.group);
 
   hideIgnisFromCommunityPlugins(setting);
   setupPluginTabs(setting, corePlugins.items);
@@ -145,7 +155,9 @@ function unpatchSettingsModal(plugin) {
 
   delete setting._ignisOpenTabPatched;
 
+  unpatchVersionRow(setting);
   restoreCommunityPlugins(setting);
+  disconnectCommunityObserver();
   clearOwnedPluginIds();
 }
 
