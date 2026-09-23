@@ -2,7 +2,10 @@ import { Platform } from "obsidian";
 import * as generalTab from "./general-tab.js";
 import * as vaultTab from "./vault-tab.js";
 import * as serverPluginsTab from "./server-plugins-tab.js";
-import { createNavEl, createTab, createGroup } from "./settings-ui.js";
+import * as serverSettings from "./server-settings.js";
+import * as pluginList from "./plugin-list.js";
+import { IgnisSettingTab, createNavEl, createGroup } from "./settings-ui.js";
+import { isDemoMode } from "../demo-guards.js";
 import {
   allIgnisNavEls,
   setupPluginTabs,
@@ -12,6 +15,50 @@ import {
   clearOwnedPluginIds,
   disconnectCommunityObserver,
 } from "./plugin-tabs.js";
+
+let ignisTabs = [];
+
+function createIgnisTabs(app) {
+  return [
+    new IgnisSettingTab(
+      app,
+      "ignis-general",
+      "General",
+      "flame",
+      generalTab.settingDefinitions,
+    ),
+    new IgnisSettingTab(
+      app,
+      "ignis-vault",
+      "Vault",
+      "vault",
+      vaultTab.settingDefinitions,
+    ),
+    new IgnisSettingTab(
+      app,
+      "ignis-core-plugins",
+      "Core plugins",
+      "blocks",
+      serverPluginsTab.settingDefinitions,
+    ),
+  ];
+}
+
+function refreshIgnisSettings() {
+  const stores = isDemoMode() ? [pluginList] : [serverSettings, pluginList];
+
+  for (const store of stores) {
+    store.refresh().then((changed) => {
+      if (!changed) {
+        return;
+      }
+
+      for (const tab of ignisTabs) {
+        tab.update();
+      }
+    });
+  }
+}
 
 function removeExistingIgnisGroups(setting) {
   const sections = setting.tabHeadersEl.querySelectorAll(
@@ -94,7 +141,7 @@ function patchOpenTab(setting) {
   setting._ignisOpenTabPatched = true;
 }
 
-function injectIgnisSettings(setting, app, plugin) {
+function injectIgnisSettings(setting, plugin) {
   removeExistingIgnisGroups(setting);
   clearOwnedPluginIds();
   allIgnisNavEls.clear();
@@ -104,19 +151,7 @@ function injectIgnisSettings(setting, app, plugin) {
 
   const ignis = createGroup("Ignis", "ignis");
 
-  const tabs = [
-    createTab("ignis-general", "General", generalTab.display, app, "flame"),
-    createTab("ignis-vault", "Vault", vaultTab.display, app, "vault"),
-    createTab(
-      "ignis-core-plugins",
-      "Core plugins",
-      serverPluginsTab.display,
-      app,
-      "blocks",
-    ),
-  ];
-
-  for (const tab of tabs) {
+  for (const tab of ignisTabs) {
     tab.navEl = createNavEl(tab, setting);
     ignis.items.appendChild(tab.navEl);
     allIgnisNavEls.set(tab.id, tab.navEl);
@@ -130,35 +165,51 @@ function injectIgnisSettings(setting, app, plugin) {
   hideIgnisFromCommunityPlugins(setting);
   setupPluginTabs(setting, corePlugins.items);
 
-  return tabs;
+  return ignisTabs;
 }
 
 function patchSettingsModal(plugin) {
-  const original = plugin.app.setting.onOpen;
-  const app = plugin.app;
+  const setting = plugin.app.setting;
+  const original = setting.onOpen;
   plugin._originalOnOpen = original;
 
-  plugin.app.setting.onOpen = function () {
+  ignisTabs = createIgnisTabs(plugin.app);
+
+  for (const tab of ignisTabs) {
+    tab.update();
+    setting.searchIndex.addTab(tab);
+  }
+
+  setting.onOpen = function () {
     // read before obsidian overwrites it.
     const lastTabId = this.lastTabId;
 
     original.call(this);
 
-    const tabs = injectIgnisSettings(this, app, plugin);
+    const tabs = injectIgnisSettings(this, plugin);
     const lastTab = tabs.find((tab) => tab.id === lastTabId);
 
     if (lastTab && !Platform.isPhone) {
       this.openTab(lastTab);
     }
+
+    refreshIgnisSettings();
   };
 }
 
 function unpatchSettingsModal(plugin) {
+  const setting = plugin.app.setting;
+
   if (plugin._originalOnOpen) {
-    plugin.app.setting.onOpen = plugin._originalOnOpen;
+    setting.onOpen = plugin._originalOnOpen;
   }
 
-  const setting = plugin.app.setting;
+  for (const tab of ignisTabs) {
+    setting.searchIndex.removeTab(tab);
+  }
+
+  ignisTabs = [];
+  setting.refreshSearch();
 
   if (setting._ignisOriginalOpenTab) {
     setting.openTab = setting._ignisOriginalOpenTab;
@@ -173,4 +224,9 @@ function unpatchSettingsModal(plugin) {
   clearOwnedPluginIds();
 }
 
-export { patchSettingsModal, unpatchSettingsModal, reconcilePluginTabs };
+export {
+  patchSettingsModal,
+  unpatchSettingsModal,
+  refreshIgnisSettings,
+  reconcilePluginTabs,
+};

@@ -1,4 +1,4 @@
-import { Setting, Notice, setIcon } from "obsidian";
+import { SettingTab, setIcon } from "obsidian";
 
 function createNavEl(tab, setting) {
   const nav = document.createElement("div");
@@ -39,30 +39,18 @@ function createNavEl(tab, setting) {
   return nav;
 }
 
-function createTab(id, name, displayFn, app, icon) {
-  const tab = {
-    id,
-    name,
-    icon: icon || null,
-    containerEl: createDiv("vertical-tab-content"),
-    navEl: null,
-    renderedItems: [],
+class IgnisSettingTab extends SettingTab {
+  constructor(app, id, name, icon, definitions) {
+    super(app, app.setting);
+    this.id = id;
+    this.name = name;
+    this.icon = icon;
+    this.definitions = definitions;
+  }
 
-    renderTab() {
-      this.display();
-    },
-
-    display() {
-      this.containerEl.empty();
-      displayFn(this.containerEl, app);
-    },
-
-    hide() {
-      this.containerEl.empty();
-    },
-  };
-
-  return tab;
+  getSettingDefinitions() {
+    return this.definitions(this);
+  }
 }
 
 function createGroup(name, section) {
@@ -82,35 +70,30 @@ function createGroup(name, section) {
   return { group, items };
 }
 
-function createSettingGroup(containerEl, heading) {
-  const group = containerEl.createDiv("setting-group");
-
-  if (heading) {
-    new Setting(group).setName(heading).setHeading();
-  }
-
-  return group.createDiv("setting-items");
+function messageDefinition(text) {
+  return {
+    searchable: false,
+    render: (setting) => {
+      setting.settingEl.addClass("ignis-message");
+      setting.setDesc(text);
+    },
+  };
 }
 
-async function saveSetting(partial) {
-  try {
-    const res = await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(partial),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      throw new Error(data.error || "Save failed");
-    }
-
-    return data;
-  } catch (e) {
-    new Notice(`Failed to save setting: ${e.message}`);
-    return false;
-  }
+function blockDefinition(build) {
+  return {
+    searchable: false,
+    render: (setting) => {
+      setting.settingEl.empty();
+      build(setting.settingEl);
+    },
+  };
 }
 
-export { createNavEl, createTab, createGroup, createSettingGroup, saveSetting };
+export {
+  IgnisSettingTab,
+  createNavEl,
+  createGroup,
+  messageDefinition,
+  blockDefinition,
+};
