@@ -132,7 +132,7 @@ module.exports = {
 
   obsidianAssetsPath:
     process.env.OBSIDIAN_ASSETS_PATH ||
-    path.join(REPO_ROOT, "investigation", "obsidian_1.12.7_unpacked"),
+    path.join(REPO_ROOT, "investigation", "obsidian_1.13.7_unpacked"),
 
   obsidianTermsOverride: process.env.OBSIDIAN_TERMS_STRING || "",
 
