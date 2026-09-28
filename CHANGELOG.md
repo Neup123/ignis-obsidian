@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.14] - Karm (2026-09-27)
+
+### Fixed
+
+- Vaults with pop-out windows in their saved layout no longer break on load.
+- Zoom handled properly.
+
 ## [0.8.13] - Karm (2026-09-25)
 
 ### Changed
