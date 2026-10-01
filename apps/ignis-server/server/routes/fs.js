@@ -10,6 +10,7 @@ const {
   resolveVaultPath,
   toVaultRel,
   sanitizeError,
+  creationTime,
 } = require("@ignis/server-core");
 const {
   writeCoalesced,
@@ -109,7 +110,7 @@ async function bufferedWriteEvent(resolved, rel, result) {
     stat: {
       size: result.size,
       mtime: result.mtime,
-      ctime: diskStat ? diskStat.ctimeMs : result.mtime,
+      ctime: diskStat ? creationTime(diskStat) : result.mtime,
     },
   };
 }
@@ -160,7 +161,7 @@ router.get("/stat", async (req, res) => {
         type: "file",
         size,
         mtime: Date.now(),
-        ctime: diskStat ? diskStat.ctimeMs : Date.now(),
+        ctime: diskStat ? creationTime(diskStat) : Date.now(),
       });
 
       return;
@@ -172,7 +173,7 @@ router.get("/stat", async (req, res) => {
       type: stat.isDirectory() ? "directory" : "file",
       size: stat.size,
       mtime: stat.mtimeMs,
-      ctime: stat.ctimeMs,
+      ctime: creationTime(stat),
     });
   } catch (e) {
     res.status(e.code === "ENOENT" ? 404 : 500).json(sanitizeError(e));
