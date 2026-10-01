@@ -13,6 +13,7 @@ const {
   writeCoalescer,
   toVaultRel,
   fromVaultRel,
+  creationTime,
 } = require("@ignis/server-core");
 const { getPending, pendingPaths, estimateSize } = writeCoalescer;
 const {
@@ -69,7 +70,7 @@ async function walkTree(rootPath) {
               type: "file",
               size,
               mtime: Date.now(),
-              ctime: s ? s.ctimeMs : Date.now(),
+              ctime: s ? creationTime(s) : Date.now(),
             };
           } else {
             tree[relPath] = fileNode(await fsp.stat(full));
