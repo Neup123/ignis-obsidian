@@ -14,8 +14,6 @@
   </h3>
 
   <p align="center">
-    <a href="https://ignis-demo.thiefling.com">Try the live demo</a>
-    &middot;
     <a href="https://ignis.thiefling.com/docs/">Documentation</a>
   </p>
 </section>
