@@ -108,11 +108,11 @@ export class MetadataCache {
     return {
       size: meta.size || 0,
       mtimeMs: meta.mtime || 0,
-      ctimeMs: meta.ctime || 0,
+      ctimeMs: meta.ctime || 0, // meta.ctime is creation time, not POSIX inode ctime.
       atimeMs: meta.mtime || 0,
       birthtimeMs: meta.ctime || 0,
       mtime: new Date(meta.mtime || 0),
-      ctime: new Date(meta.ctime || 0),
+      ctime: new Date(meta.mtime || 0),
       atime: new Date(meta.mtime || 0),
       birthtime: new Date(meta.ctime || 0),
       isFile: () => meta.type === "file",

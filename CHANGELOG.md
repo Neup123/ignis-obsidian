@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.15] - Karm (2026-10-01)
+
+### Fixed
+
+- File creation time is preserved.
+
 ## [0.8.14] - Karm (2026-09-27)
 
 ### Fixed

@@ -572,7 +572,7 @@ describe("watcher-client repopulation after a stale-tree delete", () => {
     expect(stat.isDirectory()).toBe(false);
     expect(stat.size).toBe(12);
     expect(stat.mtimeMs).toBe(1000);
-    expect(stat.ctimeMs).toBe(900);
+    expect(stat.birthtimeMs).toBe(900);
   }
 
   beforeEach(() => {
