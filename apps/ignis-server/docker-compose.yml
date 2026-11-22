@@ -1,6 +1,6 @@
 services:
   ignis:
-    image: nobbe/ignis:0.8.17
+    image: 'nobbe/ignis:latest'
     ports:
       - "8085:8080"
     environment:
