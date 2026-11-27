@@ -1,0 +1,98 @@
+name: Update Ignis image
+
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: update-ignis-image
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'Neup123/ignis-obsidian' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check stable release and queue redeploy or report manual update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COOLIFY_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}
+          COOLIFY_DEPLOY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Issues are the durable deduplication record; fail closed if disabled.
+          if [[ "$(gh api "repos/$GH_REPO" --jq .has_issues)" != true ]]; then
+            echo '::error::Enable Issues in repository Settings > General > Features before running this workflow.'
+            exit 1
+          fi
+          release=$(gh api repos/Nystik-gh/ignis/releases/latest)
+          tag=$(jq -er '.tag_name | select(type == "string" and length > 0)' <<< "$release")
+          url=$(jq -er '.html_url' <<< "$release")
+          title="Ignis image update: $tag"
+          # Closed and open issues both count: one notification/queue attempt per release.
+          existing=$(gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" |
+            jq -sr --arg title "$title" '[.[][] | select(.pull_request == null and .title == $title)] | first | .number // empty')
+          if [[ -n "$existing" ]]; then
+            echo "Release already recorded in issue #$existing."
+            exit 0
+          fi
+
+          compose=$(gh api "repos/$GH_REPO/contents/apps/ignis-server/docker-compose.yml?ref=main" --jq .content | base64 --decode)
+          pinned=$(sed -n 's/^[[:space:]]*- OBSIDIAN_VERSION=//p' <<< "$compose")
+          reason=''
+          if ! grep -Fxq "    image: 'nobbe/ignis:latest'" <<< "$compose"; then
+            reason='The fork Compose image is not nobbe/ignis:latest; review before redeploying.'
+          elif [[ ! "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)\+obsidian\.([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            reason='Unrecognized upstream release tag; verify the image and Obsidian compatibility manually.'
+          else
+            version=${BASH_REMATCH[1]}
+            expected=${BASH_REMATCH[2]}
+            if [[ "$pinned" != "$expected" ]]; then
+              reason="Upstream specifies Obsidian $expected; fork pins $pinned. Review compatibility before redeploying; do not change the pin automatically."
+            else
+              digest() {
+                docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' |
+                  jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))'
+              }
+              latest_digest=$(digest nobbe/ignis:latest)
+              release_digest=$(digest "nobbe/ignis:$version")
+              if [[ "$latest_digest" != "$release_digest" ]]; then
+                echo 'The stable release image is not yet tagged latest; retry on the next run.'
+                exit 1
+              fi
+            fi
+          fi
+          if [[ -z "$reason" && ( -z "$COOLIFY_DEPLOY_WEBHOOK" || -z "$COOLIFY_DEPLOY_TOKEN" ) ]]; then
+            reason='Repository secrets COOLIFY_DEPLOY_WEBHOOK and COOLIFY_DEPLOY_TOKEN are not both configured.'
+          fi
+          # The webhook must target exactly this existing application and force a fresh deployment.
+          app_uuid='m5vzqnr71jws8v1ewvm63ouu'
+          webhook_pattern="^https://[^/@?#]+/api/v1/deploy[?]uuid=$app_uuid&force=true$"
+          if [[ -z "$reason" && ! "$COOLIFY_DEPLOY_WEBHOOK" =~ $webhook_pattern ]]; then
+            reason='The deployment URL must use HTTPS, /api/v1/deploy, the Ignis application UUID and force=true; correct the repository secret.'
+          fi
+
+          body=$(printf '%s\n\n%s\n\n%s' "Upstream stable release: $url" "${reason:-A Coolify redeploy will be requested once for this release.}" 'Manual fallback: open the existing Ignis application in Coolify, select Redeploy (not Restart), confirm the logs show a pull of nobbe/ignis:latest and verify the running version and health. If compatibility is flagged above, review it before redeploying. Close this issue after verification. If an automated request was attempted, check the deployment queue first.')
+          number=$(gh api --method POST "repos/$GH_REPO/issues" -f title="$title" -f body="$body" --jq .number)
+          if [[ -n "$reason" ]]; then
+            echo "Manual update required; issue #$number."
+            exit 0
+          fi
+
+          # No retries: an ambiguous response could mean a deployment was already queued.
+          if response=$(curl --silent --fail --max-time 30 --proto '=https' --request POST \
+              --header "Accept: application/json" --header "Authorization: Bearer $COOLIFY_DEPLOY_TOKEN" "$COOLIFY_DEPLOY_WEBHOOK" 2>/dev/null) &&
+              jq -e --arg app "$app_uuid" '.deployments | length == 1 and .[0].resource_uuid == $app and (.[0].deployment_uuid | type == "string" and length > 0)' <<< "$response" >/dev/null 2>&1; then
+            gh issue close "$number" --comment 'Coolify accepted one deployment request. This confirms queueing only, not the running version or health.'
+          else
+            gh issue comment "$number" --body 'The deployment request was not confirmed. Check the Coolify queue before manually redeploying; the Action will not retry this release automatically.'
+            exit 1
+          fi
